@@ -12,7 +12,7 @@ The data is processed into a single, enriched dataset, and a weighted `OVERALL_S
 - **Interactive Dashboard**: A web interface built with Flask and Tailwind CSS to browse, filter, and view property details.
 - **Map Visualization**: Displays properties on a Leaflet map with overlays for CTA train lines.
 
----
+--- 
 
 ## Setup and Installation
 
