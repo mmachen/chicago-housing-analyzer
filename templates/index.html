@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chicago Housing Analysis Dashboard</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            height: 100vh;
+            overflow: hidden; /* Prevent body scroll on mobile */
+        }
+
+        /* Custom scrollbar styles */
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Leaflet popup style */
+        .leaflet-popup-content-wrapper { border-radius: 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
+        .leaflet-popup-content { margin: 12px; font-size: 14px; }
+        .leaflet-popup-tip { background: white; }
+
+        /* Leaflet layer control style */
+        .leaflet-control-layers { border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        
+        /* Active property card style */
+        .property-card.active { border-color: #4f46e5; background-color: #f0f2ff; transform: scale(1.01); }
+
+        /* Floating panel transition */
+        #propertyDetails {
+            transform: translateX(100%);
+            transition: transform 0.3s ease-in-out;
+            z-index: 1000;
+        }
+        #propertyDetails.is-visible {
+            transform: translateX(0);
+        }
+
+        #amenityModal {
+            z-index: 2000;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+    <div class="flex flex-col lg:flex-row h-screen">
+        <aside class="w-full lg:w-1/3 lg:max-w-md flex flex-col border-r border-slate-200 bg-white h-2/5 lg:h-full">
+            <header class="p-3 lg:p-4 border-b border-slate-200 shrink-0">
+                <h1 class="text-lg lg:text-xl font-bold text-slate-900">Chicago Housing Analysis</h1>
+                <p class="text-sm text-slate-500 hidden lg:block">Browse properties and analyze local data</p>
+            </header>
+
+            <div class="p-4 border-b border-slate-200 shrink-0">
+                <button id="toggleFiltersBtn" class="flex items-center justify-between w-full font-semibold text-slate-700">
+                    <span>Filters</span>
+                    <svg id="filtersChevron" class="w-5 h-5 transition-transform" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </button>
+            </div>
+            
+            <div id="filtersWrapper" class="p-4 border-b border-slate-200 shrink-0 hidden">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="filterLocation" class="text-sm font-medium text-slate-600">Location</label>
+                        <select id="filterLocation" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                            <option value="">All Locations</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="filterPrice" class="text-sm font-medium text-slate-600">Price Range</label>
+                        <select id="filterPrice" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                             <option value="">Any price</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="filterSort" class="text-sm font-medium text-slate-600">Sort By</label>
+                        <select id="filterSort" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                            <option value="OVERALL_SCORE">Best Match</option>
+                            <option value="PRICE">Price</option>
+                            <option value="SQFT">Square Feet</option>
+                            <option value="BEDS">Beds</option>
+                            <option value="DAY_ON_MARKET">Days on Market</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="filterOrder" class="text-sm font-medium text-slate-600">Order</label>
+                        <select id="filterOrder" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                            <option value="desc">Desc</option>
+                            <option value="asc">Asc</option>
+                        </select>
+                    </div>
+                </div>
+                 <div class="flex justify-between items-center mt-4">
+                    <div id="propertyCount" class="text-sm text-slate-500"></div>
+                    <button id="resetFilters" class="text-sm font-medium text-indigo-600 hover:text-indigo-800">Reset Filters</button>
+                </div>
+            </div>
+
+            <div id="property-list" class="flex-1 overflow-y-auto p-2 custom-scrollbar">
+                </div>
+        </aside>
+
+        <main class="flex-1 relative">
+            <div id="map" class="h-full w-full"></div>
+
+            <div id="propertyDetails" class="absolute top-0 right-0 h-full w-full lg:w-2/5 lg:max-w-3xl bg-white/90 backdrop-blur-sm shadow-2xl flex flex-col border-l border-slate-200">
+                
+                <div class="p-4 lg:p-6 border-b border-slate-200 bg-white/90 shrink-0">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h2 id="address" class="text-xl lg:text-2xl font-bold text-slate-900 leading-tight"></h2>
+                            <p id="location" class="text-sm lg:text-base text-slate-500"></p>
+                            <p id="price" class="text-2xl lg:text-3xl font-bold text-indigo-600 mt-2"></p>
+                        </div>
+                        <div class="text-right flex-shrink-0 ml-4">
+                            <button id="closeDetails" class="text-slate-400 hover:text-slate-600 mb-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                            <a id="address-link" href="#" target="_blank" rel="noopener noreferrer" class="block text-sm font-medium text-indigo-500 hover:underline">
+                                View on Redfin →
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-8">
+                    <section>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                            <div class="stat-item"><div class="text-sm text-slate-500">Beds</div><div id="beds" class="text-2xl font-semibold"></div></div>
+                            <div class="stat-item"><div class="text-sm text-slate-500">Baths</div><div id="baths" class="text-2xl font-semibold"></div></div>
+                            <div class="stat-item"><div class="text-sm text-slate-500">Sq. Ft.</div><div id="sqft" class="text-2xl font-semibold"></div></div>
+                            <div class="stat-item"><div class="text-sm text-slate-500">Price/SqFt</div><div id="price-per-sqft" class="text-2xl font-semibold"></div></div>
+                        </div>
+                    </section>
+
+                    <section>
+                        <h3 class="font-semibold text-lg text-slate-800 mb-4">Property Scorecard</h3>
+                        <div class="p-4 bg-slate-50 rounded-lg">
+                             <canvas id="scorecard-chart"></canvas>
+                        </div>
+                    </section>
+
+                    <section>
+                        <h3 class="font-semibold text-lg text-slate-800 mb-4">Commute Details</h3>
+                        <div id="commute-details" class="space-y-4"></div>
+                    </section>
+
+                    <section>
+                        <h3 class="font-semibold text-lg text-slate-800 mb-4">Neighborhood Safety Profile</h3>
+                        <p class="text-sm text-slate-500 mb-4">Compared to other areas in Chicago. Lower percentages are better.</p>
+                        <div id="crime-details" class="space-y-3"></div>
+                    </section>
+
+                    <section>
+                        <h3 class="font-semibold text-lg text-slate-800 mb-4">Local Amenities</h3>
+                        <div id="amenities-details" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                    </section>
+
+                    <section>
+                        <h3 class="font-semibold text-lg text-slate-800 mb-4">Neighborhood Demographics</h3>
+                        <div class="grid grid-cols-2 gap-6">
+                            <div class="stat-item bg-slate-50 p-4 rounded-lg"><div class="text-sm text-slate-500">Per Capita Income</div><div id="per-capita-income" class="text-xl font-semibold"></div></div>
+                            <div class="stat-item bg-slate-50 p-4 rounded-lg"><div class="text-sm text-slate-500">Poverty Rate</div><div id="poverty-rate" class="text-xl font-semibold"></div></div>
+                            <div class="stat-item bg-slate-50 p-4 rounded-lg"><div class="text-sm text-slate-500">Hardship Index</div><div id="hardship-index" class="text-xl font-semibold"></div></div>
+                            <div class="stat-item bg-slate-50 p-4 rounded-lg"><div class="text-sm text-slate-500">Top Non-English</div><div id="predominant-language" class="text-xl font-semibold"></div></div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="amenityModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div class="flex justify-between items-center border-b pb-3 mb-4">
+                <h3 id="modalTitle" class="text-lg font-semibold"></h3>
+                <button id="closeModal" class="text-slate-400 hover:text-slate-600">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div id="modalContent" class="max-h-96 overflow-y-auto custom-scrollbar pr-2">
+                </div>
+        </div>
+    </div>
+
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+        let map;
+        let markers = [];
+        let markerGroup = L.featureGroup();
+        let properties = [];
+        let scorecardChart = null;
+
+        // --- Helper Functions ---
+        const formatCurrency = (value) => value != null ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value) : 'N/A';
+        const formatNumber = (value) => value != null ? new Intl.NumberFormat('en-US').format(value) : 'N/A';
+        const formatPercentage = (value) => value != null ? `${Number(value).toFixed(1)}%` : 'N/A';
+        const formatDistance = (value) => value != null ? `${Number(value).toFixed(2)} mi` : 'N/A';
+        const formatScore = (value) => value != null ? Math.round(Number(value) * 100) : 0;
+        const toNum = (val) => val != null ? Number(val) : 0;
+
+        // --- Map Initialization ---
+        function initMap() {
+            map = L.map('map').setView([41.8781, -87.6298], 11);
+            const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            });
+            baseLayer.addTo(map);
+            markerGroup.addTo(map);
+            loadTrainLines(baseLayer);
+        }
+
+        function loadTrainLines(baseLayer) {
+            fetch('/static/cta_lines.geojson')
+                .then(response => { if (!response.ok) throw new Error('CTA GeoJSON not found.'); return response.json(); })
+                .then(data => {
+                    const lineStyles = { 'RED': { color: '#C60C30' }, 'BRN': { color: '#62361B' }, 'BLUE': { color: '#00A1DE' }, 'G': { color: '#009B3A' }, 'P': { color: '#522398' }, 'PNK': { color: '#E27EA6' }, 'O': { color: '#F9461C' } };
+                    const overlayMaps = {};
+                    Object.keys(lineStyles).forEach(line => {
+                        const style = { ...lineStyles[line], weight: 3, opacity: 0.7 };
+                        overlayMaps[`<span style='color: ${style.color}; font-weight: bold;'>${line} Line</span>`] = L.geoJSON(data, { style: style, filter: (f) => f.properties.lines.includes(line) });
+                    });
+                    L.control.layers({ "Street Map": baseLayer }, overlayMaps, { collapsed: false }).addTo(map);
+                }).catch(error => console.error('Could not load train lines GeoJSON:', error.message));
+        }
+
+        // --- UI Rendering ---
+        function populateFilters(data) {
+            const locationSelect = document.getElementById('filterLocation');
+            data.locations.forEach(loc => locationSelect.innerHTML += `<option value="${loc}">${loc}</option>`);
+
+            const priceSelect = document.getElementById('filterPrice');
+            data.price_ranges.forEach(([minv, maxv]) => {
+                const text = (maxv === 1000001) ? `${formatCurrency(minv)}+` : `${formatCurrency(minv)} - ${formatCurrency(maxv)}`;
+                priceSelect.innerHTML += `<option value="${minv}-${maxv}">${text}</option>`;
+            });
+        }
+        
+        function renderPropertyList(properties) {
+            const list = document.getElementById('property-list');
+            list.innerHTML = properties.length === 0 ? `<div class="p-4 text-center text-slate-500">No properties match your criteria.</div>` : '';
+            if (properties.length === 0) return;
+
+            properties.forEach(prop => {
+                const score = prop.OVERALL_SCORE || 0;
+                let scoreColor = 'bg-slate-200 text-slate-600';
+                if (score > 0.6) scoreColor = 'bg-green-100 text-green-800';
+                else if (score > 0.4) scoreColor = 'bg-yellow-100 text-yellow-800';
+                else if (score > 0) scoreColor = 'bg-red-100 text-red-800';
+
+                const card = document.createElement('div');
+                card.className = 'property-card cursor-pointer p-4 border-b border-l-4 border-transparent hover:bg-slate-50 transition-all duration-200';
+                card.dataset.mls = prop.MLS;
+                card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <p class="font-bold text-xl text-slate-800">${formatCurrency(prop.PRICE)}</p>
+                        <span class="text-xs font-semibold px-2 py-1 rounded-full ${scoreColor}">Match: ${formatScore(score)}</span>
+                    </div>
+                    <p class="font-medium text-slate-700 truncate mt-1">${prop.ADDRESS}</p>
+                    <div class="flex items-center space-x-4 text-sm text-slate-500 mt-2">
+                        <span><strong class="text-slate-700">${prop.BEDS || 'N/A'}</strong> beds</span>
+                        <span>&middot;</span>
+                        <span><strong class="text-slate-700">${prop.BATHS || 'N/A'}</strong> baths</span>
+                        <span>&middot;</span>
+                        <span><strong class="text-slate-700">${formatNumber(prop.SQFT) || 'N/A'}</strong> sqft</span>
+                    </div>
+                `;
+                card.addEventListener('click', () => handlePropertySelect(prop.MLS));
+                list.appendChild(card);
+            });
+        }
+        
+        function updatePropertyDetails(prop) {
+            document.getElementById('address').textContent = prop.ADDRESS || 'N/A';
+            document.getElementById('location').textContent = prop.LOCATION || 'N/A';
+            document.getElementById('price').textContent = formatCurrency(prop.PRICE);
+            document.getElementById('address-link').href = prop.URL || '#';
+            
+            document.getElementById('beds').textContent = prop.BEDS || 'N/A';
+            document.getElementById('baths').textContent = prop.BATHS || 'N/A';
+            document.getElementById('sqft').textContent = formatNumber(prop.SQFT) || 'N/A';
+            document.getElementById('price-per-sqft').textContent = formatCurrency(prop.PRICE_PER_SQFT) || 'N/A';
+            
+            document.getElementById('commute-details').innerHTML = [
+                createCommuteCard(prop, 'work_Mike', "Mike's Work (Transit)"),
+                createCommuteCard(prop, 'work_Xixi', "Xixi's Work (Transit)"),
+                createCommuteCard(prop, 'school_Hana', "Hana's School (Transit)"),
+                createCommuteCard(prop, 'school_Hana', "Hana's School (Drive)", 'drive')
+            ].join('');
+
+            document.getElementById('crime-details').innerHTML = [
+                'Gun Violence', 'Drug Related', 'Theft', 'Human Trafficking', 'Murder', 'Other'
+            ].map(crime => createCrimeBar(crime, prop[`CRIME_${crime.split(' ')[0].toUpperCase()}`])).join('');
+            
+            document.getElementById('amenities-details').innerHTML = [
+                { type: 'GROCERY', name: 'Grocery Stores' }, { type: 'RESTAURANT', name: 'Restaurants' },
+                { type: 'BARS', name: 'Bars' }, { type: 'PARKS', name: 'Parks' },
+                { type: 'CHICAGO_PUBLIC_LIBRARY', name: 'Libraries' }, { type: 'TRADER_JOES', name: "Trader Joe's" }
+            ].map(amenity => createAmenityButton(prop, amenity.name, amenity.type)).join('');
+            
+            document.getElementById('per-capita-income').textContent = formatCurrency(prop['PER CAPITA INCOME ']);
+            document.getElementById('poverty-rate').textContent = formatPercentage(prop['PERCENT HOUSEHOLDS BELOW POVERTY']);
+            document.getElementById('hardship-index').textContent = prop['HARDSHIP INDEX'] || 'N/A';
+            document.getElementById('predominant-language').textContent = prop['PREDOMINANT NON-ENGLISH LANGUAGE (%)'] || 'N/A';
+
+            initScorecardChart(prop);
+        }
+
+        // --- Component Builders ---
+        function createCommuteCard(prop, key, title, mode = 'transit') {
+            const time = (mode === 'drive') ? prop[`DRIVE_TIME_${key}`] : prop[`COMMUTE_TIME_${key}`];
+            const steps = prop[`COMMUTE_STEPS_${key}`];
+            if (!time) return '';
+            let stepsHtml = '';
+            if (mode === 'transit' && steps) {
+                const individualSteps = steps.split(', ').map(step => `<li>${step}</li>`).join('');
+                stepsHtml = `<ol class="list-decimal list-inside space-y-1 text-xs text-slate-600 mt-2">${individualSteps}</ol>`;
+            }
+            return `<div class="bg-slate-50 p-4 rounded-lg">
+                <div class="flex justify-between items-center">
+                    <p class="font-semibold text-slate-800">${title}</p>
+                    <div class="flex items-center text-sm font-medium">${time}</div>
+                </div>
+                ${stepsHtml}
+            </div>`;
+        }
+
+        function createCrimeBar(label, score) {
+            const percentage = score != null ? Math.max(0, Math.min(toNum(score) * 100, 100)) : 0;
+            let colorClass = 'bg-slate-200', levelText = 'N/A';
+            if (score != null) {
+                if (score < 0.33) { colorClass = 'bg-green-500'; levelText = 'Low'; }
+                else if (score < 0.66) { colorClass = 'bg-yellow-500'; levelText = 'Moderate'; }
+                else { colorClass = 'bg-red-500'; levelText = 'High'; }
+            }
+            return `<div>
+                <div class="flex justify-between items-center mb-1"><span class="text-sm font-medium text-slate-700">${label}</span><span class="text-sm font-medium text-slate-600">${levelText}</span></div>
+                <div class="h-2 w-full bg-slate-200 rounded-full"><div class="${colorClass} h-full rounded-full" style="width: ${percentage}%"></div></div>
+            </div>`;
+        }
+        
+        function createAmenityButton(prop, name, type) {
+            const count = prop[`${type}_WALK_NUM`];
+            const listData = prop[`${type}_LIST`] || '[]';
+            const isDisabled = !prop[`${type}_LIST`];
+            const escapedListData = listData.replace(/'/g, '&apos;');
+
+            return `<button 
+                class="amenity-item bg-slate-50 p-4 rounded-lg text-left hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:hover:bg-slate-50 transition-colors"
+                data-name="${name}" 
+                data-list='${escapedListData}'
+                ${isDisabled ? 'disabled' : ''}>
+                <p class="font-semibold text-slate-800 pointer-events-none">${name}</p>
+                <div class="text-sm text-slate-600 mt-1 pointer-events-none">
+                    ${count != null ? `<span>${count} within 0.5mi</span>` : '<span>No data</span>'}
+                </div>
+            </button>`;
+        }
+
+        function initScorecardChart(prop) {
+            const ctx = document.getElementById('scorecard-chart').getContext('2d');
+            const gun = toNum(prop.CRIME_GUN), drug = toNum(prop.CRIME_DRUG), theft = toNum(prop.CRIME_THEFT);
+            const safetyScore = (gun + drug + theft) > 0 ? 1 - ((gun + drug + theft) / 3) : 0;
+            const commuteScore = toNum(prop.OVERALL_SCORE); 
+            const valueScore = toNum(prop.PRICE_PER_SQFT) > 0 ? Math.max(0, 1 - (prop.PRICE_PER_SQFT / 600)) : 0;
+            const amenitiesScore = Math.min(1, (toNum(prop.GROCERY_WALK_NUM) + toNum(prop.RESTAURANT_WALK_NUM)) / 25);
+            const data = {
+                labels: ['Safety', 'Commute', 'Value', 'Amenities'],
+                datasets: [{
+                    label: 'Property Score', data: [formatScore(safetyScore), formatScore(commuteScore), formatScore(valueScore), formatScore(amenitiesScore)],
+                    backgroundColor: 'rgba(79, 70, 229, 0.2)', borderColor: 'rgba(79, 70, 229, 1)',
+                    borderWidth: 2, pointBackgroundColor: 'rgba(79, 70, 229, 1)', pointBorderColor: '#fff',
+                }]
+            };
+            if (scorecardChart) {
+                scorecardChart.data = data;
+                scorecardChart.options.scales.r.pointLabels.font.size = 14; 
+                scorecardChart.update();
+            } else {
+                scorecardChart = new Chart(ctx, { type: 'radar', data: data, 
+                    options: { 
+                        scales: { 
+                            r: { 
+                                beginAtZero: true, 
+                                max: 100, 
+                                ticks: { display: false },
+                                pointLabels: {
+                                    font: {
+                                        size: 14
+                                    }
+                                }
+                            } 
+                        }, 
+                        plugins: { legend: { display: false } } 
+                    } 
+                });
+            }
+        }
+
+        // --- Data Fetching & Handling ---
+        function loadProperties() {
+            const params = new URLSearchParams({ location: document.getElementById('filterLocation').value, sort_by: document.getElementById('filterSort').value, sort_order: document.getElementById('filterOrder').value });
+            const price = document.getElementById('filterPrice').value;
+            if (price) {
+                const [minv, maxv] = price.split('-');
+                params.set('price_min', minv);
+                params.set('price_max', maxv);
+            }
+            fetch(`/api/properties?${params.toString()}`).then(res => res.json()).then(data => {
+                properties = data;
+                renderPropertyList(properties);
+                updateMapMarkers(properties);
+                document.getElementById('propertyCount').textContent = `${properties.length} properties found`;
+                if (properties.length > 0) {
+                    handlePropertySelect(properties[0].MLS, true);
+                } else {
+                    document.getElementById('propertyDetails').classList.remove('is-visible');
+                }
+            }).catch(error => console.error("Error loading properties:", error));
+        }
+        
+        function loadInitialData() {
+            fetch('/api/initial-data').then(res => res.json()).then(data => {
+                populateFilters(data);
+                loadProperties();
+            }).catch(error => console.error("Error loading initial data:", error));
+        }
+
+        // --- Event Handlers ---
+        function handlePropertySelect(mlsId, isInitialLoad = false) {
+            const selectedProp = properties.find(p => p.MLS == mlsId); 
+            if (!selectedProp) { console.error(`Property with MLS ID ${mlsId} not found.`); return; }
+            try {
+                updatePropertyDetails(selectedProp);
+                document.getElementById('propertyDetails').classList.add('is-visible');
+                document.querySelectorAll('.property-card').forEach(card => {
+                    card.classList.toggle('active', card.dataset.mls == mlsId);
+                });
+                const marker = markers.find(m => m.mls_id == mlsId);
+                if (marker) {
+                    if (!isInitialLoad && selectedProp.LATITUDE && selectedProp.LONGITUDE) {
+                        map.flyTo([selectedProp.LATITUDE, selectedProp.LONGITUDE], 15);
+                    }
+                    marker.openPopup();
+                }
+            } catch (e) {
+                console.error("Error updating property details view:", e);
+                document.getElementById('propertyDetails').classList.remove('is-visible');
+            }
+        }
+        
+        function updateMapMarkers(properties) {
+            markerGroup.clearLayers();
+            markers = [];
+            properties.forEach(prop => {
+                if (prop.LATITUDE && prop.LONGITUDE) {
+                    const marker = L.marker([prop.LATITUDE, prop.LONGITUDE]);
+                    marker.mls_id = prop.MLS;
+                    marker.bindPopup(`<div class="font-semibold">${prop.ADDRESS}</div>${formatCurrency(prop.PRICE)}`);
+                    marker.on('click', () => handlePropertySelect(prop.MLS));
+                    markers.push(marker);
+                    markerGroup.addLayer(marker);
+                }
+            });
+            if (markers.length > 0) {
+                map.fitBounds(markerGroup.getBounds().pad(0.1), { animate: true, maxZoom: 14 });
+            }
+        }
+
+        // --- Initialization ---
+        window.onload = function() {
+            initMap();
+            loadInitialData();
+            
+            ['filterLocation', 'filterPrice', 'filterSort', 'filterOrder'].forEach(id => {
+                document.getElementById(id).addEventListener('change', loadProperties);
+            });
+            
+            document.getElementById('resetFilters').addEventListener('click', () => {
+                document.getElementById('filterLocation').value = '';
+                document.getElementById('filterPrice').value = '';
+                document.getElementById('filterSort').value = 'OVERALL_SCORE';
+                document.getElementById('filterOrder').value = 'desc';
+                loadProperties();
+            });
+
+            document.getElementById('closeDetails').addEventListener('click', () => {
+                document.getElementById('propertyDetails').classList.remove('is-visible');
+                document.querySelectorAll('.property-card').forEach(card => card.classList.remove('active'));
+            });
+
+            const modal = document.getElementById('amenityModal');
+            document.getElementById('closeModal').addEventListener('click', () => modal.classList.add('hidden'));
+            modal.addEventListener('click', (e) => { 
+                if (e.target === modal) {
+                    modal.classList.add('hidden');
+                }
+            });
+
+            document.getElementById('amenities-details').addEventListener('click', (e) => {
+                const amenityButton = e.target.closest('.amenity-item');
+                if (!amenityButton) return;
+
+                const name = amenityButton.dataset.name;
+                const listJson = amenityButton.dataset.list;
+                
+                document.getElementById('modalTitle').textContent = `Nearby ${name}`;
+                const contentEl = document.getElementById('modalContent');
+                
+                try {
+                    const cleanedListJson = listJson.replace(/\\n|\n/g, ' ');
+                    const list = JSON.parse(cleanedListJson);
+
+                    if (list && list.length > 0) {
+                        contentEl.innerHTML = `<ul class="space-y-3">
+                            ${list.map(item => `
+                                <li class="flex justify-between items-baseline border-b border-slate-100 pb-2 last:border-b-0">
+                                    <span class="font-medium text-slate-700 pr-4">${item.name}</span>
+                                    <span class="text-sm text-slate-500 flex-shrink-0">${item.distance}</span>
+                                </li>
+                            `).join('')}
+                        </ul>`;
+                    } else {
+                        contentEl.textContent = 'No specific locations found.';
+                    }
+                } catch (err) {
+                    console.error("Failed to parse amenity list JSON:", err);
+                    contentEl.textContent = 'Could not display amenity data.';
+                }
+                
+                modal.classList.remove('hidden');
+            });
+            
+            const toggleBtn = document.getElementById('toggleFiltersBtn');
+            const filtersWrapper = document.getElementById('filtersWrapper');
+            const filtersChevron = document.getElementById('filtersChevron');
+            toggleBtn.addEventListener('click', () => {
+                const isHidden = filtersWrapper.classList.toggle('hidden');
+                if (isHidden) {
+                    filtersChevron.classList.remove('rotate-180');
+                } else {
+                    filtersChevron.classList.add('rotate-180');
+                }
+            });
+        };
+    </script>
+</body>
+</html>

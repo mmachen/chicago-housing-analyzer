@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chicago Housing Analysis Dashboard</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- LeafletJS for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Custom Styles -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Custom scrollbar for property list */
+        #property-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        #property-list::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        #property-list::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        #property-list::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* Custom Leaflet popup style */
+        .leaflet-popup-content-wrapper {
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .leaflet-popup-content {
+            margin: 12px;
+            font-size: 14px;
+        }
+        .leaflet-popup-tip {
+            background: white;
+        }
+
+        /* Style for the Leaflet layer control */
+        .leaflet-control-layers {
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .leaflet-control-layers-base label, .leaflet-control-layers-overlays label {
+            font-weight: 500;
+        }
+
+        /* Style for the active property card */
+        .property-card.active {
+            border-color: #4f46e5;
+            background-color: #eef2ff;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+    <div class="flex h-screen overflow-hidden">
+        <!-- Left Panel: Filters & Property List -->
+        <aside class="w-1/3 flex flex-col border-r border-slate-200 bg-white">
+            <header class="p-4 border-b border-slate-200">
+                <h1 class="text-xl font-bold text-slate-900">Chicago Housing Analysis</h1>
+                <p class="text-sm text-slate-500">Browse properties and analyze local data</p>
+            </header>
+
+            <!-- Filters -->
+            <div class="p-4 border-b border-slate-200">
+                <h3 class="font-semibold mb-3 text-slate-700">Filters</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="filterLocation" class="text-sm font-medium text-slate-600">Location</label>
+                        <select id="filterLocation" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                            <option value="">All Locations</option>
+                            <!-- Dynamically populated -->
+                        </select>
+                    </div>
+                    <div>
+                        <label for="filterPrice" class="text-sm font-medium text-slate-600">Price Range</label>
+                        <select id="filterPrice" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                             <option value="">Any price</option>
+                             <!-- Dynamically populated -->
+                        </select>
+                    </div>
+                    <div>
+                        <label for="filterSort" class="text-sm font-medium text-slate-600">Sort By</label>
+                        <select id="filterSort" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                            <option value="OVERALL_SCORE">Best Match</option>
+                            <option value="PRICE">Price</option>
+                            <option value="SQFT">Square Feet</option>
+                            <option value="BEDS">Beds</option>
+                            <option value="DAY_ON_MARKET">Days on Market</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="filterOrder" class="text-sm font-medium text-slate-600">Order</label>
+                        <select id="filterOrder" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                            <option value="desc">Desc</option>
+                            <option value="asc">Asc</option>
+                        </select>
+                    </div>
+                </div>
+                 <div class="flex justify-between items-center mt-4">
+                    <div id="propertyCount" class="text-sm text-slate-500"></div>
+                    <button id="resetFilters" class="text-sm font-medium text-indigo-600 hover:text-indigo-800">Reset Filters</button>
+                </div>
+            </div>
+
+            <!-- Property List -->
+            <div id="property-list" class="flex-1 overflow-y-auto p-2">
+                <!-- Property cards will be injected here -->
+            </div>
+        </aside>
+
+        <!-- Right Panel: Map & Details -->
+        <main class="w-2/3 flex flex-col">
+            <!-- Map -->
+            <div id="map" class="h-1/2 w-full bg-slate-200"></div>
+
+            <!-- Property Details -->
+            <div id="propertyDetails" class="h-1/2 w-full flex flex-col bg-white border-t border-slate-200" style="display: none;">
+                <!-- Header -->
+                <div class="p-4 flex justify-between items-start border-b border-slate-200">
+                    <div>
+                        <h2 id="address" class="text-2xl font-bold text-slate-900"></h2>
+                        <p id="location" class="text-slate-500"></p>
+                    </div>
+                    <div class="text-right flex-shrink-0 ml-4">
+                        <p id="price" class="text-2xl font-bold text-indigo-600"></p>
+                        <a id="address-link" href="#" target="_blank" rel="noopener noreferrer" class="text-sm text-indigo-500 hover:underline">View on Redfin</a>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="flex border-b border-slate-200 px-4">
+                    <button data-tab="details" class="tab-btn font-medium py-3 px-4 text-indigo-600 border-b-2 border-indigo-600">Details</button>
+                    <button data-tab="commute" class="tab-btn font-medium py-3 px-4 text-slate-500">Commute</button>
+                    <button data-tab="crime" class="tab-btn font-medium py-3 px-4 text-slate-500">Crime</button>
+                    <button data-tab="amenities" class="tab-btn font-medium py-3 px-4 text-slate-500">Amenities</button>
+                    <button data-tab="demographics" class="tab-btn font-medium py-3 px-4 text-slate-500">Demographics</button>
+                </div>
+
+                <!-- Tab Content -->
+                <div class="flex-1 overflow-y-auto p-6">
+                    <!-- Details Tab -->
+                    <div id="tab-content-details" class="tab-content grid grid-cols-3 gap-6">
+                        <div class="stat-item"><div class="text-sm text-slate-500">Beds</div><div id="beds" class="text-lg font-semibold"></div></div>
+                        <div class="stat-item"><div class="text-sm text-slate-500">Baths</div><div id="baths" class="text-lg font-semibold"></div></div>
+                        <div class="stat-item"><div class="text-sm text-slate-500">Square Feet</div><div id="sqft" class="text-lg font-semibold"></div></div>
+                        <div class="stat-item"><div class="text-sm text-slate-500">Year Built</div><div id="year" class="text-lg font-semibold"></div></div>
+                        <div class="stat-item"><div class="text-sm text-slate-500">Days on Market</div><div id="days-on-market" class="text-lg font-semibold"></div></div>
+                        <div class="stat-item"><div class="text-sm text-slate-500">Price / Sq Ft</div><div id="price-per-sqft" class="text-lg font-semibold"></div></div>
+                    </div>
+                    
+                    <!-- Commute Tab -->
+                    <div id="tab-content-commute" class="tab-content hidden grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Commute cards populated here -->
+                    </div>
+
+                    <!-- Crime Tab -->
+                    <div id="tab-content-crime" class="tab-content hidden grid grid-cols-2 gap-x-8 gap-y-4">
+                        <!-- Crime bars populated here -->
+                    </div>
+
+                    <!-- Amenities Tab -->
+                    <div id="tab-content-amenities" class="tab-content hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Amenities list populated here -->
+                    </div>
+
+                    <!-- Demographics Tab -->
+                    <div id="tab-content-demographics" class="tab-content hidden grid grid-cols-2 gap-6">
+                         <div class="stat-item"><div class="text-sm text-slate-500">Per Capita Income</div><div id="per-capita-income" class="text-lg font-semibold"></div></div>
+                         <div class="stat-item"><div class="text-sm text-slate-500">Poverty Rate</div><div id="poverty-rate" class="text-lg font-semibold"></div></div>
+                         <div class="stat-item"><div class="text-sm text-slate-500">Hardship Index</div><div id="hardship-index" class="text-lg font-semibold"></div></div>
+                         <div class="stat-item"><div class="text-sm text-slate-500">Predominant Language</div><div id="predominant-language" class="text-lg font-semibold"></div></div>
+                         <div class="stat-item col-span-2"><div class="text-sm text-slate-500">Top Languages</div><div id="top-languages" class="text-lg font-semibold"></div></div>
+                    </div>
+                </div>
+            </div>
+             <!-- Placeholder when no property is selected -->
+            <div id="details-placeholder" class="h-1/2 w-full flex items-center justify-center bg-white border-t border-slate-200">
+                <div class="text-center text-slate-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </select>
+                    <h3 class="mt-2 text-lg font-medium">No Property Selected</h3>
+                    <p class="mt-1 text-sm">Select a property from the list to see details.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+        let map;
+        let markers = [];
+        let markerGroup = L.featureGroup();
+        let properties = [];
+        let locations = [];
+        let priceRanges = [];
+
+        // --- Helper Functions ---
+        const formatCurrency = (value) => value != null ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value) : 'N/A';
+        const formatNumber = (value) => value != null ? new Intl.NumberFormat('en-US').format(value) : 'N/A';
+        const formatPercentage = (value) => value != null ? `${Number(value).toFixed(1)}%` : 'N/A';
+        const formatDistance = (value) => value != null ? `${Number(value).toFixed(2)} mi` : 'N/A';
+
+        // --- Map Initialization ---
+        function initMap() {
+            map = L.map('map').setView([41.8781, -87.6298], 11);
+            const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            });
+            baseLayer.addTo(map);
+            markerGroup.addTo(map);
+
+            // Load train lines and add layer control
+            loadTrainLines(baseLayer);
+        }
+
+        function loadTrainLines(baseLayer) {
+            fetch('/static/cta_lines.geojson')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('CTA GeoJSON file not found. Please download it and place it in the static folder as instructed.');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const lineStyles = {
+                        'RED': { color: '#C60C30', weight: 3, opacity: 0.75 },
+                        'BRN': { color: '#62361B', weight: 3, opacity: 0.75 },
+                        'BLUE': { color: '#00A1DE', weight: 3, opacity: 0.75 },
+                        'G': { color: '#009B3A', weight: 3, opacity: 0.75 },
+                        'P': { color: '#522398', weight: 3, opacity: 0.75 },
+                        'PNK': { color: '#E27EA6', weight: 3, opacity: 0.75 },
+                        'O': { color: '#F9461C', weight: 3, opacity: 0.75 }
+                    };
+
+                    const redLine = L.geoJSON(data, { style: lineStyles['RED'], filter: (f) => f.properties.lines.includes('RED') });
+                    const brownLine = L.geoJSON(data, { style: lineStyles['BRN'], filter: (f) => f.properties.lines.includes('BRN') });
+                    const blueLine = L.geoJSON(data, { style: lineStyles['BLUE'], filter: (f) => f.properties.lines.includes('BLUE') });
+                    const greenLine = L.geoJSON(data, { style: lineStyles['G'], filter: (f) => f.properties.lines.includes('G') });
+                    const purpleLine = L.geoJSON(data, { style: lineStyles['P'], filter: (f) => f.properties.lines.includes('P') });
+                    const pinkLine = L.geoJSON(data, { style: lineStyles['PNK'], filter: (f) => f.properties.lines.includes('PNK') });
+                    const orangeLine = L.geoJSON(data, { style: lineStyles['O'], filter: (f) => f.properties.lines.includes('O') });
+
+                    const baseMaps = { "Street Map": baseLayer };
+                    const overlayMaps = {
+                        "<span style='color: #C60C30; font-weight: bold;'>Red Line</span>": redLine,
+                        "<span style='color: #62361B; font-weight: bold;'>Brown Line</span>": brownLine,
+                        "<span style='color: #00A1DE; font-weight: bold;'>Blue Line</span>": blueLine,
+                        "<span style='color: #009B3A; font-weight: bold;'>Green Line</span>": greenLine,
+                        "<span style='color: #522398; font-weight: bold;'>Purple Line</span>": purpleLine,
+                        "<span style='color: #E27EA6; font-weight: bold;'>Pink Line</span>": pinkLine,
+                        "<span style='color: #F9461C; font-weight: bold;'>Orange Line</span>": orangeLine
+                    };
+
+                    L.control.layers(baseMaps, overlayMaps, { collapsed: false }).addTo(map);
+                })
+                .catch(error => {
+                    console.error('Could not load train lines GeoJSON:', error.message);
+                    L.control.layers({ "Street Map": baseLayer }).addTo(map);
+                });
+        }
+
+        // --- UI Rendering ---
+        
+        // Populate dropdown filters
+        function populateFilters(data) {
+            locations = data.locations || [];
+            const locationSelect = document.getElementById('filterLocation');
+            locations.forEach(loc => {
+                locationSelect.innerHTML += `<option value="${loc}">${loc}</option>`;
+            });
+
+            priceRanges = data.price_ranges || [];
+            const priceSelect = document.getElementById('filterPrice');
+            priceRanges.forEach(r => {
+                const [minv, maxv] = r;
+                const text = (maxv === 1000001) ? `${formatCurrency(minv)}+` : `${formatCurrency(minv)} - ${formatCurrency(maxv)}`;
+                priceSelect.innerHTML += `<option value="${minv}-${maxv}">${text}</option>`;
+            });
+        }
+        
+        // Render the list of property cards on the left
+        function renderPropertyList(properties) {
+            const list = document.getElementById('property-list');
+            list.innerHTML = ''; // Clear existing list
+            if (properties.length === 0) {
+                list.innerHTML = `<div class="p-4 text-center text-slate-500">No properties match your criteria.</div>`;
+                return;
+            }
+            properties.forEach(prop => {
+                const card = document.createElement('div');
+                card.className = 'property-card cursor-pointer p-4 border-b border-l-4 border-transparent hover:bg-slate-50 transition-colors duration-150';
+                card.dataset.mls = prop.MLS;
+                card.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <p class="font-bold text-lg text-slate-800">${formatCurrency(prop.PRICE)}</p>
+                        <div class="text-xs font-semibold px-2 py-1 rounded-full ${prop.DAY_ON_MARKET < 15 ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'}">${prop.DAY_ON_MARKET} days on market</div>
+                    </div>
+                    <p class="font-medium text-slate-700 truncate">${prop.ADDRESS}</p>
+                    <div class="flex items-center space-x-4 text-sm text-slate-500 mt-2">
+                        <span><strong class="text-slate-700">${prop.BEDS || 'N/A'}</strong> beds</span>
+                        <span>&middot;</span>
+                        <span><strong class="text-slate-700">${prop.BATHS || 'N/A'}</strong> baths</span>
+                        <span>&middot;</span>
+                        <span><strong class="text-slate-700">${formatNumber(prop.SQFT) || 'N/A'}</strong> sqft</span>
+                    </div>
+                `;
+                card.addEventListener('click', () => handlePropertySelect(prop.MLS));
+                list.appendChild(card);
+            });
+        }
+
+        // Update the main details panel on the right
+        function updatePropertyDetails(prop) {
+            document.getElementById('details-placeholder').style.display = 'none';
+            document.getElementById('propertyDetails').style.display = 'flex';
+            
+            // Header
+            document.getElementById('address').textContent = prop.ADDRESS || 'N/A';
+            document.getElementById('location').textContent = prop.LOCATION || 'N/A';
+            document.getElementById('price').textContent = formatCurrency(prop.PRICE);
+            const addressLink = document.getElementById('address-link');
+            if (prop.URL) {
+                addressLink.href = prop.URL;
+                addressLink.style.display = 'inline';
+            } else {
+                 addressLink.style.display = 'none';
+            }
+            
+            // Details Tab
+            document.getElementById('beds').textContent = prop.BEDS || 'N/A';
+            document.getElementById('baths').textContent = prop.BATHS || 'N/A';
+            document.getElementById('sqft').textContent = formatNumber(prop.SQFT) || 'N/A';
+            document.getElementById('year').textContent = prop.YEAR || 'N/A';
+            document.getElementById('days-on-market').textContent = prop.DAY_ON_MARKET || 'N/A';
+            document.getElementById('price-per-sqft').textContent = formatCurrency(prop.PRICE_PER_SQFT) || 'N/A';
+            
+            // Commute Tab
+            const commuteContainer = document.getElementById('tab-content-commute');
+            commuteContainer.innerHTML = [
+                createTransitCard(prop, 'work_Mike', "Mike's Work (Transit)"),
+                createTransitCard(prop, 'work_Xixi', "Xixi's Work (Transit)"),
+                createTransitCard(prop, 'school_Hana', "Hana's School (Transit)"),
+                createCommuteCard("Hana's School (Drive)", prop['DRIVE_TIME_school_Hana'], null, null, null, 'driving', false, false, false, false, false, false, false)
+            ].join('');
+
+            // Crime Tab
+            const crimeContainer = document.getElementById('tab-content-crime');
+            crimeContainer.innerHTML = `
+                ${createCrimeBar('Gun Violence', prop.CRIME_GUN)}
+                ${createCrimeBar('Drug Related', prop.CRIME_DRUG)}
+                ${createCrimeBar('Theft', prop.CRIME_THEFT)}
+                ${createCrimeBar('Human Trafficking', prop.CRIME_HUMAN)}
+                ${createCrimeBar('Murder', prop.CRIME_MURDER)}
+                ${createCrimeBar('Other', prop.CRIME_OTHER)}
+            `;
+            
+            // Amenities Tab
+            const amenitiesContainer = document.getElementById('tab-content-amenities');
+            amenitiesContainer.innerHTML = [
+                { type: 'GROCERY', name: 'Grocery Stores' },
+                { type: 'RESTAURANT', name: 'Restaurants' },
+                { type: 'BARS', name: 'Bars' },
+                { type: 'PARKS', name: 'Parks' },
+                { type: 'CHICAGO_PUBLIC_LIBRARY', name: 'Libraries' },
+                { type: 'WHOLE_FOODS', name: 'Whole Foods' },
+                { type: 'TRADER_JOES', name: "Trader Joe's" },
+                { type: 'LIQUOR', name: 'Liquor Stores' }
+            ].map(amenity => createAmenityItem(prop, amenity.name, amenity.type)).join('');
+
+            // Demographics Tab
+            document.getElementById('per-capita-income').textContent = formatCurrency(prop['PER CAPITA INCOME ']);
+            document.getElementById('poverty-rate').textContent = formatPercentage(prop['PERCENT HOUSEHOLDS BELOW POVERTY']);
+            document.getElementById('hardship-index').textContent = prop['HARDSHIP INDEX'] || 'N/A';
+            document.getElementById('top-languages').textContent = prop.TOP_LANGUAGES || 'N/A';
+            document.getElementById('predominant-language').textContent = prop['PREDOMINANT NON-ENGLISH LANGUAGE (%)'] || 'N/A';
+        }
+
+        // --- Component Builders for Details ---
+        
+        function createTransitCard(prop, destKey, title) {
+            const commuteTime = prop[`COMMUTE_TIME_${destKey}`];
+            const numSteps = prop[`COMMUTE_NUM_STEPS_${destKey}`];
+            const walkingTime = prop[`WALKING_TIME_${destKey}`];
+            const steps = prop[`COMMUTE_STEPS_${destKey}`];
+            const usesBrown = prop[`USES_BROWN_LINE_${destKey}`];
+            const usesRed = prop[`USES_RED_LINE_${destKey}`];
+            const usesBlue = prop[`USES_BLUE_LINE_${destKey}`];
+            const usesPink = prop[`USES_PINK_LINE_${destKey}`];
+            const usesGreen = prop[`USES_GREEN_LINE_${destKey}`];
+            const usesOrange = prop[`USES_ORANGE_LINE_${destKey}`];
+            const usesPurple = prop[`USES_PURPLE_LINE_${destKey}`];
+
+            return createCommuteCard(title, commuteTime, numSteps, walkingTime, steps, 'transit', usesBrown, usesRed, usesBlue, usesPink, usesGreen, usesOrange, usesPurple);
+        }
+
+        function createCommuteCard(title, time, steps, walkingTime, stepDetails, mode, usesBrown, usesRed, usesBlue, usesPink, usesGreen, usesOrange, usesPurple) {
+            if (!time) return ''; // Don't render a card if there's no time info
+
+            const isTransit = mode === 'transit';
+
+            const timeIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+            const stepsIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>`;
+            const walkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>`;
+            const driveIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0zM11 17H6.538C6.224 17 6 16.776 6 16.462L5.154 12.538C5.057 12.224 5.28 12 5.594 12H18.406c.314 0 .537.224.44.538L18 16.462C18 16.776 17.776 17 17.462 17H13m-2 0h-2m2 0h2m-2 0h-2m-2-5h12v-2H7v2z" /></svg>`;
+
+            let lineBadges = '';
+            if (isTransit) {
+                if (usesBrown) {
+                    lineBadges += `<span class="text-xs font-bold inline-block py-1 px-2 rounded-full text-white ml-1" style="background-color: #62361B;">Brown</span>`;
+                }
+                if (usesRed) {
+                    lineBadges += `<span class="text-xs font-bold inline-block py-1 px-2 rounded-full text-white ml-1" style="background-color: #C60C30;">Red</span>`;
+                }
+                if (usesBlue) {
+                    lineBadges += `<span class="text-xs font-bold inline-block py-1 px-2 rounded-full text-white ml-1" style="background-color: #00A1DE;">Blue</span>`;
+                }
+                if (usesGreen) {
+                    lineBadges += `<span class="text-xs font-bold inline-block py-1 px-2 rounded-full text-white ml-1" style="background-color: #009B3A;">Green</span>`;
+                }
+                if (usesPink) {
+                    lineBadges += `<span class="text-xs font-bold inline-block py-1 px-2 rounded-full text-white ml-1" style="background-color: #E27EA6;">Pink</span>`;
+                }
+                if (usesOrange) {
+                    lineBadges += `<span class="text-xs font-bold inline-block py-1 px-2 rounded-full text-white ml-1" style="background-color: #F9461C;">Orange</span>`;
+                }
+                if (usesPurple) {
+                    lineBadges += `<span class="text-xs font-bold inline-block py-1 px-2 rounded-full text-white ml-1" style="background-color: #522398;">Purple</span>`;
+                }
+            }
+
+            const timeDetail = `<div class="flex items-center font-medium text-slate-800">${isTransit ? timeIcon : driveIcon} ${time}</div>`;
+            const stepsDetail = steps ? `<div class="flex items-center text-slate-600">${stepsIcon} ${steps} steps</div>` : '';
+            const walkingDetail = walkingTime ? `<div class="flex items-center text-slate-600">${walkIcon} ${walkingTime} total walk</div>` : '';
+
+            let stepsHtml = '';
+            if (isTransit && stepDetails) {
+                const individualSteps = stepDetails.split(', ').map(step => {
+                    let formattedStep = step;
+                    // Handle "Walk to ..."
+                    if (step.startsWith('Walk to')) {
+                        formattedStep = 'Walk to <strong>' + step.substring('Walk to '.length) + '</strong>';
+                    } 
+                    // Handle "Take {Line} ({Type}) towards {Destination}"
+                    else if (step.startsWith('Take ')) {
+                        const takeMatch = step.match(/^Take (.*?)(?:\s+towards\s+(.*))?$/);
+                        if (takeMatch) {
+                            const vehicle = takeMatch[1];
+                            const destination = takeMatch[2];
+                            if (destination) {
+                                formattedStep = `Take <strong>${vehicle}</strong> towards <strong>${destination}</strong>`;
+                            } else {
+                                formattedStep = `Take <strong>${vehicle}</strong>`;
+                            }
+                        }
+                    }
+                    return `<li class="text-slate-700 leading-relaxed">${formattedStep}</li>`;
+                }).join('');
+                stepsHtml = `
+                    <div class="mt-4 pt-4 border-t border-slate-200">
+                        <h4 class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">Route Details</h4>
+                        <ol class="list-decimal list-inside space-y-2 text-sm">
+                            ${individualSteps}
+                        </ol>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="bg-slate-50 p-4 rounded-lg">
+                    <div class="flex justify-between items-start mb-3">
+                        <p class="font-semibold text-slate-800">${title}</p>
+                        <div class="flex-shrink-0 ml-2">${lineBadges}</div>
+                    </div>
+                    <div class="flex items-center space-x-4 text-sm ">
+                        ${timeDetail}
+                        ${isTransit ? stepsDetail : ''}
+                        ${isTransit ? walkingDetail : ''}
+                    </div>
+                    ${stepsHtml}
+                </div>`;
+        }
+        
+        function getCrimeColor(score) {
+            if (score == null) return 'bg-slate-200';
+            if (score > 0.66) return 'bg-red-500';
+            if (score > 0.33) return 'bg-yellow-500';
+            return 'bg-green-500';
+        }
+
+        function createCrimeBar(label, score) {
+            const percentage = score != null ? Math.max(0, Math.min(Number(score) * 100, 100)) : 0;
+            const displayValue = score != null ? `${percentage.toFixed(0)}%` : 'N/A';
+            const colorClass = getCrimeColor(score);
+            return `
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-sm font-medium text-slate-700">${label}</span>
+                        <span class="text-sm font-medium text-slate-500">${displayValue}</span>
+                    </div>
+                    <div class="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+                        <div class="${colorClass} h-full rounded-full" style="width: ${percentage}%"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function createAmenityItem(prop, name, type) {
+            const distance = prop[`${type}_CLOSEST_DST`];
+            const walkTime = prop[`${type}_CLOSEST_WALK_TIME`];
+            const count = prop[`${type}_WALK_NUM`];
+            const listJson = prop[`${type}_LIST`];
+
+            if (distance == null && walkTime == null && count == null && !listJson) return '';
+            
+            let listHtml = '';
+            if (listJson) {
+                try {
+                    const places = JSON.parse(listJson);
+                    if (places && places.length > 0) {
+                        const listItems = places.slice(0, 15).map(p => `
+                            <li class="flex justify-between items-center py-1.5 border-b border-slate-100 last:border-b-0">
+                                <span class="text-slate-700 text-sm pr-2">${p.name}</span>
+                                <span class="text-slate-500 text-xs font-medium flex-shrink-0">${p.distance}</span>
+                            </li>`).join('');
+
+                        listHtml = `
+                            <div class="mt-3 pt-3 border-t border-slate-200">
+                                <h4 class="text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wider">Nearby ${name}</h4>
+                                <ul class="max-h-48 overflow-y-auto pr-2">${listItems}</ul>
+                            </div>
+                        `;
+                    }
+                } catch (e) {
+                    console.error(`Error parsing amenity list for ${type}:`, e);
+                }
+            }
+            
+            return `
+                <div class="bg-slate-50 p-4 rounded-lg">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="font-semibold text-slate-800">${name}</span>
+                            <div class="text-sm text-slate-600 mt-1">
+                                ${count != null ? `<span>${count} within 0.5mi</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="text-right text-sm text-slate-600 flex-shrink-0 ml-4">
+                            ${distance != null ? `<div><span class="font-medium">Closest:</span> ${formatDistance(distance)}</div>` : ''}
+                            ${walkTime != null ? `<div class="text-xs text-slate-500">(${walkTime} walk)</div>` : ''}
+                        </div>
+                    </div>
+                    ${listHtml}
+                </div>
+            `;
+        }
+
+        // --- Data Fetching & Handling ---
+        
+        // Fetch properties based on current filters
+        function loadProperties() {
+            const params = new URLSearchParams();
+            const location = document.getElementById('filterLocation').value;
+            const price = document.getElementById('filterPrice').value;
+            params.set('sort_by', document.getElementById('filterSort').value);
+            params.set('sort_order', document.getElementById('filterOrder').value);
+
+            if (location) params.set('location', location);
+            if (price) {
+                 const [minv, maxv] = price.split('-');
+                 params.set('price_min', minv);
+                 params.set('price_max', maxv);
+            }
+
+            fetch(`/api/properties?${params.toString()}`)
+                .then(res => res.json())
+                .then(data => {
+                    properties = data;
+                    renderPropertyList(properties);
+                    updateMapMarkers(properties);
+                    document.getElementById('propertyCount').textContent = `${properties.length} properties found`;
+
+                    if (properties.length > 0) {
+                        handlePropertySelect(properties[0].MLS, true); // Select first property but don't pan map
+                    } else {
+                        document.getElementById('propertyDetails').style.display = 'none';
+                        document.getElementById('details-placeholder').style.display = 'flex';
+                    }
+                })
+                .catch(error => console.error("Error loading properties:", error));
+        }
+        
+        // Fetch initial data for filters
+        function loadInitialData() {
+            fetch('/api/initial-data')
+                .then(res => res.json())
+                .then(data => {
+                    populateFilters(data);
+                    loadProperties(); // Load properties after filters are ready
+                })
+                .catch(error => console.error("Error loading initial data:", error));
+        }
+
+        // --- Event Handlers ---
+
+        function handlePropertySelect(mlsId, isInitialLoad = false) {
+            const selectedProp = properties.find(p => p.MLS === mlsId);
+            if (!selectedProp) return;
+
+            updatePropertyDetails(selectedProp);
+            
+            // Highlight active card in the list
+            document.querySelectorAll('.property-card').forEach(card => {
+                card.classList.toggle('active', card.dataset.mls == mlsId);
+            });
+            
+            // Open marker popup and center map
+            const marker = markers.find(m => m.mls_id === mlsId);
+            if (marker) {
+                if (!isInitialLoad && selectedProp.LATITUDE && selectedProp.LONGITUDE) {
+                    map.flyTo([selectedProp.LATITUDE, selectedProp.LONGITUDE], 15);
+                }
+                marker.openPopup();
+            }
+        }
+        
+        function updateMapMarkers(properties) {
+            markerGroup.clearLayers();
+            markers = [];
+            
+            properties.forEach(prop => {
+                if (prop.LATITUDE && prop.LONGITUDE) {
+                    const marker = L.marker([prop.LATITUDE, prop.LONGITUDE]);
+                    marker.mls_id = prop.MLS;
+                    marker.bindPopup(`<div class="font-semibold">${prop.ADDRESS}</div>${formatCurrency(prop.PRICE)}`);
+                    marker.on('click', () => handlePropertySelect(prop.MLS));
+                    markers.push(marker);
+                    markerGroup.addLayer(marker);
+                }
+            });
+
+            if (markers.length > 0) {
+                map.fitBounds(markerGroup.getBounds().pad(0.1), { animate: true });
+            }
+        }
+
+        // --- Initialization ---
+
+        window.onload = function() {
+            initMap();
+            loadInitialData();
+            
+            // Setup filter event listeners
+            ['filterLocation', 'filterPrice', 'filterSort', 'filterOrder'].forEach(id => {
+                document.getElementById(id).addEventListener('change', loadProperties);
+            });
+            
+            document.getElementById('resetFilters').addEventListener('click', () => {
+                document.getElementById('filterLocation').value = '';
+                document.getElementById('filterPrice').value = '';
+                document.getElementById('filterSort').value = 'OVERALL_SCORE';
+                document.getElementById('filterOrder').value = 'desc';
+                loadProperties();
+            });
+
+            // Setup tab switching
+            document.querySelectorAll('.tab-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    const tabName = button.dataset.tab;
+                    // Update button styles
+                    document.querySelectorAll('.tab-btn').forEach(btn => {
+                        btn.classList.remove('text-indigo-600', 'border-indigo-600');
+                        btn.classList.add('text-slate-500');
+                    });
+                    button.classList.add('text-indigo-600', 'border-indigo-600');
+                    button.classList.remove('text-slate-500');
+
+                    // Show/hide content
+                    document.querySelectorAll('.tab-content').forEach(content => {
+                        content.classList.add('hidden');
+                    });
+                    document.getElementById(`tab-content-${tabName}`).classList.remove('hidden');
+                });
+            });
+        };
+    </script>
+</body>
+</html> 
