@@ -4,6 +4,9 @@ This project is a comprehensive tool for analyzing real estate properties in Chi
 
 The data is processed into a single, enriched dataset, and a weighted `OVERALL_SCORE` is calculated for each property based on user-defined preferences. The results are then served through a Flask-based web dashboard for interactive filtering, sorting, and visualization on a map.
 
+<img width="1888" height="982" alt="image" src="https://github.com/user-attachments/assets/43c416f5-f7c6-443e-8846-a8242e4586f7" />
+
+
 ## Features
 
 - **Data Aggregation**: Combines property data with commute times, nearby amenities, crime statistics, and demographic information.
