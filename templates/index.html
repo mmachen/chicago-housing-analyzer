@@ -255,10 +255,13 @@
                 .then(response => { if (!response.ok) throw new Error('CTA GeoJSON not found.'); return response.json(); })
                 .then(data => {
                     const lineStyles = { 'RED': { color: '#C60C30' }, 'BRN': { color: '#62361B' }, 'BLUE': { color: '#00A1DE' }, 'G': { color: '#009B3A' }, 'P': { color: '#522398' }, 'PNK': { color: '#E27EA6' }, 'O': { color: '#F9461C' }, 'Y': { color: '#F9E300' } };
+                    const linesOnByDefault = ['RED', 'BLUE', 'BRN', 'PNK'];
                     const overlayMaps = {};
                     Object.keys(lineStyles).forEach(line => {
                         const style = { ...lineStyles[line], weight: 3, opacity: 0.7 };
-                        overlayMaps[`<span style='color: ${style.color}; font-weight: bold;'>${line} Line</span>`] = L.geoJSON(data, { style: style, filter: (f) => f.properties.lines.includes(line) });
+                        const layer = L.geoJSON(data, { style: style, filter: (f) => f.properties.lines.includes(line) });
+                        if (linesOnByDefault.includes(line)) layer.addTo(map);
+                        overlayMaps[`<span style='color: ${style.color}; font-weight: bold;'>${line} Line</span>`] = layer;
                     });
                     L.control.layers({ "Street Map": baseLayer }, overlayMaps, { collapsed: false }).addTo(map);
                 }).catch(error => console.error('Could not load train lines GeoJSON:', error.message));
