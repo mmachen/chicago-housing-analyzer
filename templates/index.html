@@ -246,7 +246,7 @@
             fetch('/static/cta_lines.geojson')
                 .then(response => { if (!response.ok) throw new Error('CTA GeoJSON not found.'); return response.json(); })
                 .then(data => {
-                    const lineStyles = { 'RED': { color: '#C60C30' }, 'BRN': { color: '#62361B' }, 'BLUE': { color: '#00A1DE' }, 'G': { color: '#009B3A' }, 'P': { color: '#522398' }, 'PNK': { color: '#E27EA6' }, 'O': { color: '#F9461C' } };
+                    const lineStyles = { 'RED': { color: '#C60C30' }, 'BRN': { color: '#62361B' }, 'BLUE': { color: '#00A1DE' }, 'G': { color: '#009B3A' }, 'P': { color: '#522398' }, 'PNK': { color: '#E27EA6' }, 'O': { color: '#F9461C' }, 'Y': { color: '#F9E300' } };
                     const overlayMaps = {};
                     Object.keys(lineStyles).forEach(line => {
                         const style = { ...lineStyles[line], weight: 3, opacity: 0.7 };
