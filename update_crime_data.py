@@ -21,8 +21,10 @@ from housing.crime_portal import download_recent_crimes
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(
         description="Download recent crime data from the Chicago Data Portal.")
-    parser.add_argument("--months", type=int, default=12,
-                        help="How many months of history to download (default: 12).")
+    parser.add_argument("--months", type=int, default=24,
+                        help="How many months of history to download "
+                             "(default: 24; scores use the last 12, the rest "
+                             "feeds the year-over-year crime trend).")
     args = parser.parse_args(argv)
 
     print(f"Downloading crimes from the last {args.months} months "

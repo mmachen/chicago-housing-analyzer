@@ -30,6 +30,18 @@ LANGUAGES_CSV = DATA_DIR / "languages_spoken.csv"
 FINAL_DATA_CSV = OUTPUT_DIR / "final_data.csv"
 CACHE_DB = CACHE_DIR / "cache.db"
 
+# Neighborhood datasets written by update_area_data.py (all free sources).
+CTA_BUS_STOPS_CSV = DATA_DIR / "cta_bus_stops.csv"
+METRA_STATIONS_CSV = DATA_DIR / "metra_stations.csv"
+CPS_SCHOOLS_CSV = DATA_DIR / "cps_schools.csv"
+RODENT_CSV = DATA_DIR / "rodent_complaints.csv"
+
+# Price history appended by fetch_listings.py on every pull.
+LISTING_HISTORY_CSV = DATA_DIR / "listing_history.csv"
+
+# CTA rail geometry (also drawn on the dashboard map).
+CTA_LINES_GEOJSON = PROJECT_ROOT / "static" / "cta_lines.geojson"
+
 
 def crime_csv_path() -> Path:
     """Prefer the refreshed portal download; fall back to the static extract."""
@@ -156,6 +168,21 @@ WALKABLE_RADIUS_MILES = 0.5
 
 CRIME_RADIUS_MILES = 2.0
 AFFORDABLE_RADIUS_MILES = 0.5
+BUS_STOP_RADIUS_MILES = 0.25     # ~5-minute walk
+RODENT_RADIUS_MILES = 0.25
+CRIME_TREND_RADIUS_MILES = 1.0
+NEAR_L_TRACKS_MILES = 0.095      # ~500 ft: close enough to hear the trains
+
+# --- Taxes and carrying costs ----------------------------------------------
+
+# Rough effective property-tax rate for Chicago residential, applied to the
+# list price for the EST_TAX_ANNUAL estimate. Exact bills vary by exemptions
+# and reassessment -- check the PIN on cookcountypropertyinfo.com.
+EFFECTIVE_TAX_RATE = 0.019
+
+# $1/month of HOA reduces buying power like ~$200 of price (rate-dependent);
+# used to fold HOA fees into the value score.
+HOA_PRICE_EQUIVALENT = 200
 
 # --- Caching and scoring ---------------------------------------------------
 

@@ -10,7 +10,7 @@ import re
 
 import pandas as pd
 
-from housing.config import COMMUTE_REQUIREMENTS, SCORED_AMENITIES
+from housing.config import COMMUTE_REQUIREMENTS, HOA_PRICE_EQUIVALENT, SCORED_AMENITIES
 from housing.crime import CRIME_SCORE_COLUMNS
 
 _HOURS_RE = re.compile(r"(\d+(?:\.\d+)?)\s*hour")
@@ -87,8 +87,16 @@ def amenities_score(df: pd.DataFrame) -> pd.Series:
 
 
 def value_score(df: pd.DataFrame) -> pd.Series:
-    """Score value: lower price per square foot is better."""
-    price_per_sqft = df["PRICE"].replace(0, pd.NA) / df["SQFT"].replace(0, pd.NA)
+    """Score value: lower effective price per square foot is better.
+
+    HOA fees are folded in as price-equivalent (each $1/month of HOA
+    reduces buying power like ~$HOA_PRICE_EQUIVALENT of price), so a condo
+    with steep assessments scores like the pricier home it effectively is.
+    """
+    hoa = pd.to_numeric(df.get("HOA"), errors="coerce").fillna(0)
+    effective_price = (df["PRICE"].replace(0, pd.NA)
+                       + hoa * HOA_PRICE_EQUIVALENT)
+    price_per_sqft = effective_price / df["SQFT"].replace(0, pd.NA)
     return minmax_normalize(1 / price_per_sqft, 0.5)
 
 

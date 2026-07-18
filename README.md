@@ -17,6 +17,11 @@ map visualization.
   re-runs only pay for new or stale data.
 - **Interactive dashboard** — Flask + Tailwind UI to browse, filter, and view
   property details, with a Leaflet map and CTA train-line overlays.
+- **Neighborhood intelligence** — per home: facing direction (Chicago grid),
+  nearby bus routes, closest Metra station, nearest CPS elementary with
+  rating, distance to L tracks (noise), O'Hare noise estimate, 311 rat
+  complaints, year-over-year crime trend, Cook County assessor value and
+  estimated taxes, and price-drop tracking across listing pulls.
 
 ## Project structure
 
@@ -26,6 +31,7 @@ housing_app/
 ├── build_dataset.py        # Data pipeline (builds output/final_data.csv)
 ├── fetch_listings.py       # Pull the latest Redfin listings automatically
 ├── update_crime_data.py    # Refresh crime data from the Chicago Data Portal
+├── update_area_data.py     # Bus stops, Metra, schools, 311 rodent data
 ├── housing/                # Library code
 │   ├── config.py           # Paths, search filters, destinations, weights
 │   ├── cache.py            # SQLite cache for API responses
@@ -34,6 +40,9 @@ housing_app/
 │   ├── redfin.py           # Redfin CSV-export downloader
 │   ├── crime.py            # Crime-density scores
 │   ├── crime_portal.py     # Chicago Data Portal (Socrata) downloader
+│   ├── area_data.py        # Bus/Metra/school/311 downloaders
+│   ├── neighborhood.py     # Facing, transit access, schools, trends
+│   ├── taxes.py            # Cook County assessor lookups
 │   ├── affordable_housing.py
 │   └── scoring.py          # Normalization + OVERALL_SCORE
 ├── templates/index.html    # Dashboard front end
@@ -94,6 +103,18 @@ refresh, recompute scores without touching the Google APIs:
 ```bash
 python build_dataset.py --skip-commute --skip-places --force-crime
 ```
+
+### 5. Neighborhood data (recommended)
+
+```bash
+python update_area_data.py
+```
+
+Downloads CTA bus stops, Metra stations, CPS elementary schools with
+ratings, and 12 months of 311 rodent complaints (all free). The pipeline
+uses whatever is present and skips gracefully otherwise. `refresh_all.py`
+runs this automatically; the rarely-changing files are only re-downloaded
+with `--force`.
 
 ## Usage
 

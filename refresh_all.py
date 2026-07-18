@@ -56,6 +56,7 @@ import sys
 
 import build_dataset
 import fetch_listings
+import update_area_data
 import update_crime_data
 
 
@@ -87,9 +88,11 @@ def main(argv=None) -> None:
 
     ok_listings = _run_step(1, "Fetch Redfin listings", fetch_listings.main, [])
     ok_crime = _run_step(2, "Refresh crime data", update_crime_data.main, [])
+    ok_area = _run_step(3, "Refresh area data (bus/schools/311)",
+                        update_area_data.main, [])
 
     # The build is the point of the routine; let a failure here surface fully.
-    print(f"\n{'=' * 60}\nStep 3: Build dataset "
+    print(f"\n{'=' * 60}\nStep 4: Build dataset "
           f"({'free mode, no Google APIs' if args.no_google else 'Google APIs for new homes'})"
           f"\n{'=' * 60}")
     build_dataset.main(build_args)
@@ -97,6 +100,7 @@ def main(argv=None) -> None:
     print(f"\n{'=' * 60}\nRefresh complete"
           + ("" if ok_listings else " (listings step failed)")
           + ("" if ok_crime else " (crime step failed)")
+          + ("" if ok_area else " (area-data step failed)")
           + f"\n{'=' * 60}")
 
     if args.serve:

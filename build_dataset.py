@@ -20,7 +20,7 @@ import time
 
 import pandas as pd
 
-from housing import affordable_housing, google_maps, scoring
+from housing import affordable_housing, google_maps, neighborhood, scoring, taxes
 from housing import crime as crime_module
 from housing.cache import Cache
 from housing.config import (
@@ -34,11 +34,17 @@ from housing.config import (
     CTA_TRAIN_LINES,
     DEFAULT_CACHE_TTL_DAYS,
     DEFAULT_SCORE_WEIGHTS,
+    CPS_SCHOOLS_CSV,
+    CTA_BUS_STOPS_CSV,
+    CTA_LINES_GEOJSON,
     DRIVING_DESTINATIONS,
     FINAL_DATA_CSV,
     GOOGLE_QUERIES_PER_SECOND,
     KEYWORD_AMENITIES,
     LANGUAGES_CSV,
+    LISTING_HISTORY_CSV,
+    METRA_STATIONS_CSV,
+    RODENT_CSV,
     PLACES_LOGIC_VERSION,
     REDFIN_COLUMNS,
     REDFIN_RAW_CSV,
@@ -70,6 +76,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--force-crime", action="store_true",
                         help="Recompute crime scores even if already present "
                              "(use after running update_crime_data.py).")
+    parser.add_argument("--skip-taxes", action="store_true",
+                        help="Skip Cook County assessor lookups (free but "
+                             "network-dependent; results are cached).")
     parser.add_argument("--ttl-days", type=int, default=DEFAULT_CACHE_TTL_DAYS,
                         help="TTL for cache entries in days.")
     parser.add_argument("--w-commute", type=float,
@@ -151,19 +160,33 @@ def load_property_data() -> pd.DataFrame:
     return prop_df.reset_index(drop=True)
 
 
-def load_crime_data() -> pd.DataFrame:
+def load_crime_data() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return (score_df, full_df).
+
+    Crime scores always use the most recent 12 months so their meaning stays
+    stable; the full download (up to 24 months) additionally feeds the
+    year-over-year crime trend.
+    """
     path = crime_csv_path()
     crime_df = pd.read_csv(path)
     crime_df.dropna(inplace=True)
     crime_df = crime_df.reset_index(drop=True)
+
+    score_df = crime_df
     if path == CRIME_RECENT_CSV and "Date" in crime_df.columns:
+        dates = pd.to_datetime(crime_df["Date"], errors="coerce")
+        latest = dates.max()
+        if pd.notna(latest):
+            score_df = crime_df[dates > latest - pd.DateOffset(months=12)]
+            score_df = score_df.reset_index(drop=True)
         print(f"Crime data: {len(crime_df):,} incidents from {path.name} "
               f"({str(crime_df['Date'].min())[:10]} to "
-              f"{str(crime_df['Date'].max())[:10]})")
+              f"{str(crime_df['Date'].max())[:10]}; "
+              f"{len(score_df):,} in the scoring window)")
     else:
         print(f"Crime data: {len(crime_df):,} incidents from {path.name} "
               f"(static extract -- run update_crime_data.py for fresh data)")
-    return crime_df
+    return score_df, crime_df
 
 
 def load_affordable_housing_data() -> pd.DataFrame:
@@ -405,6 +428,68 @@ def enrich_with_community_data(prop_df: pd.DataFrame) -> pd.DataFrame:
     return prop_df
 
 
+# --- Neighborhood features and price history --------------------------------
+
+def _load_optional_csv(path, label: str):
+    if path.exists():
+        return pd.read_csv(path)
+    print(f"Note: {path.name} missing; skipping {label} "
+          f"(run update_area_data.py).")
+    return None
+
+
+def add_neighborhood_features(prop_df: pd.DataFrame,
+                              crime_full_df) -> pd.DataFrame:
+    """Compute all free per-home neighborhood features (recomputed every
+    run -- they're fast and cost nothing)."""
+    neighborhood.add_facing_direction(prop_df)
+    neighborhood.add_ohare_noise(prop_df)
+
+    bus_df = _load_optional_csv(CTA_BUS_STOPS_CSV, "bus-route features")
+    if bus_df is not None:
+        neighborhood.add_bus_features(prop_df, bus_df)
+
+    metra_df = _load_optional_csv(METRA_STATIONS_CSV, "Metra proximity")
+    if metra_df is not None:
+        neighborhood.add_metra_features(prop_df, metra_df)
+
+    schools_df = _load_optional_csv(CPS_SCHOOLS_CSV, "school features")
+    if schools_df is not None:
+        neighborhood.add_school_features(prop_df, schools_df)
+
+    rodent_df = _load_optional_csv(RODENT_CSV, "rodent-complaint counts")
+    if rodent_df is not None:
+        neighborhood.add_rodent_features(prop_df, rodent_df)
+
+    if CTA_LINES_GEOJSON.exists():
+        neighborhood.add_l_track_distance(prop_df,
+                                          neighborhood.load_l_track_segments())
+
+    if crime_full_df is not None:
+        neighborhood.add_crime_trend(prop_df, crime_full_df)
+
+    return prop_df
+
+
+def merge_price_history(prop_df: pd.DataFrame) -> pd.DataFrame:
+    """Attach first-seen date/price and any price drop from the pull history."""
+    try:
+        history = pd.read_csv(LISTING_HISTORY_CSV, dtype={"MLS": str})
+    except FileNotFoundError:
+        return prop_df
+
+    first = (history.sort_values("DATE").groupby("MLS")
+             .first().reset_index()[["MLS", "DATE", "PRICE"]])
+    first.columns = ["MLS", "FIRST_SEEN", "ORIG_PRICE"]
+
+    prop_df = prop_df.drop(columns=["FIRST_SEEN", "ORIG_PRICE", "PRICE_DROP"],
+                           errors="ignore")
+    prop_df = prop_df.merge(first, on="MLS", how="left")
+    drop = prop_df["ORIG_PRICE"] - prop_df["PRICE"]
+    prop_df["PRICE_DROP"] = drop.where(drop > 0)
+    return prop_df
+
+
 # --- Main pipeline ---------------------------------------------------------
 
 def main(argv=None) -> None:
@@ -415,7 +500,8 @@ def main(argv=None) -> None:
     prop_df["LOCATION"] = prop_df["LOCATION"].apply(standardize_location)
     prop_df = ensure_generated_columns(prop_df)
 
-    crime_df = None if args.skip_crime else load_crime_data()
+    crime_df, crime_full_df = ((None, None) if args.skip_crime
+                               else load_crime_data())
     affordable_df = None if args.skip_affordable else load_affordable_housing_data()
 
     # The Google Maps client (and API key) is only needed for commutes/places.
@@ -473,6 +559,14 @@ def main(argv=None) -> None:
             minmax_normalize(prop_df[col], 0.0)
 
     prop_df = enrich_with_community_data(prop_df)
+    prop_df = add_neighborhood_features(prop_df, crime_full_df)
+
+    if not args.skip_taxes:
+        print("Looking up Cook County assessor data (cached after first run)...")
+        tax_cache = Cache(db_path=CACHE_DB, table="tax_cache", ttl_days=120)
+        taxes.add_tax_features(prop_df, tax_cache)
+
+    prop_df = merge_price_history(prop_df)
 
     # Drop legacy columns from older pipeline versions.
     legacy_cols = [c for c in prop_df.columns

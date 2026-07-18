@@ -150,6 +150,8 @@
                             <h2 id="address" class="text-xl lg:text-2xl font-bold text-slate-900 leading-tight"></h2>
                             <p id="location" class="text-sm lg:text-base text-slate-500"></p>
                             <p id="price" class="text-2xl lg:text-3xl font-bold text-indigo-600 mt-2"></p>
+                            <p id="price-drop" class="text-sm font-semibold text-green-700 mt-1 hidden"></p>
+                            <p id="open-house" class="text-sm font-medium text-indigo-700 mt-1 hidden"></p>
                         </div>
                         <div class="text-right flex-shrink-0 ml-4">
                             <button id="closeDetails" class="text-slate-400 hover:text-slate-600 mb-4">
@@ -164,11 +166,13 @@
 
                 <div class="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-8">
                     <section>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
                             <div class="stat-item"><div class="text-sm text-slate-500">Beds</div><div id="beds" class="text-2xl font-semibold"></div></div>
                             <div class="stat-item"><div class="text-sm text-slate-500">Baths</div><div id="baths" class="text-2xl font-semibold"></div></div>
                             <div class="stat-item"><div class="text-sm text-slate-500">Sq. Ft.</div><div id="sqft" class="text-2xl font-semibold"></div></div>
                             <div class="stat-item"><div class="text-sm text-slate-500">Price/SqFt</div><div id="price-per-sqft" class="text-2xl font-semibold"></div></div>
+                            <div class="stat-item"><div class="text-sm text-slate-500">HOA / mo</div><div id="hoa" class="text-2xl font-semibold"></div></div>
+                            <div class="stat-item"><div class="text-sm text-slate-500">Est. Taxes / yr</div><div id="est-tax" class="text-2xl font-semibold"></div></div>
                         </div>
                     </section>
 
@@ -185,6 +189,11 @@
                     </section>
 
                     <section>
+                        <h3 class="font-semibold text-lg text-slate-800 mb-4">Location &amp; Transit</h3>
+                        <div id="location-details" class="space-y-2"></div>
+                    </section>
+
+                    <section>
                         <h3 class="font-semibold text-lg text-slate-800 mb-4">Neighborhood Safety Profile</h3>
                         <p class="text-sm text-slate-500 mb-4">Compared to other areas in Chicago. Lower percentages are better.</p>
                         <div id="crime-details" class="space-y-3"></div>
@@ -198,6 +207,10 @@
                     <section>
                         <h3 class="font-semibold text-lg text-slate-800 mb-4">Neighborhood Demographics</h3>
                         <div class="grid grid-cols-2 gap-6">
+                            <div class="stat-item bg-slate-50 p-4 rounded-lg"><div class="text-sm text-slate-500">Nearest Elementary</div><div id="nearest-school" class="text-base font-semibold"></div></div>
+                            <div class="stat-item bg-slate-50 p-4 rounded-lg"><div class="text-sm text-slate-500">Crime Trend (YoY, 1 mi)</div><div id="crime-trend" class="text-xl font-semibold"></div></div>
+                            <div class="stat-item bg-slate-50 p-4 rounded-lg"><div class="text-sm text-slate-500">Rat Complaints (&frac14; mi/yr)</div><div id="rodent-count" class="text-xl font-semibold"></div></div>
+                            <div class="stat-item bg-slate-50 p-4 rounded-lg"><div class="text-sm text-slate-500">Assessor Value</div><div id="assessor-value" class="text-xl font-semibold"></div></div>
                             <div class="stat-item bg-slate-50 p-4 rounded-lg"><div class="text-sm text-slate-500">Per Capita Income</div><div id="per-capita-income" class="text-xl font-semibold"></div></div>
                             <div class="stat-item bg-slate-50 p-4 rounded-lg"><div class="text-sm text-slate-500">Poverty Rate</div><div id="poverty-rate" class="text-xl font-semibold"></div></div>
                             <div class="stat-item bg-slate-50 p-4 rounded-lg"><div class="text-sm text-slate-500">Hardship Index</div><div id="hardship-index" class="text-xl font-semibold"></div></div>
@@ -326,12 +339,40 @@
             document.getElementById('baths').textContent = prop.BATHS || 'N/A';
             document.getElementById('sqft').textContent = formatNumber(prop.SQFT) || 'N/A';
             document.getElementById('price-per-sqft').textContent = formatCurrency(prop.PRICE_PER_SQFT) || 'N/A';
+            document.getElementById('hoa').textContent = (prop.HOA != null && prop.HOA > 0) ? formatCurrency(prop.HOA) : 'None';
+            document.getElementById('est-tax').textContent = prop.EST_TAX_ANNUAL != null ? formatCurrency(prop.EST_TAX_ANNUAL) : 'N/A';
+
+            const priceDropEl = document.getElementById('price-drop');
+            if (prop.PRICE_DROP != null && prop.PRICE_DROP > 0) {
+                priceDropEl.textContent = `↓ ${formatCurrency(prop.PRICE_DROP)} since first seen ${prop.FIRST_SEEN || ''}`;
+                priceDropEl.classList.remove('hidden');
+            } else {
+                priceDropEl.classList.add('hidden');
+            }
+            const openHouseEl = document.getElementById('open-house');
+            if (prop.NEXT_OPEN_S) {
+                openHouseEl.textContent = `Open house: ${prop.NEXT_OPEN_S}`;
+                openHouseEl.classList.remove('hidden');
+            } else {
+                openHouseEl.classList.add('hidden');
+            }
             
             document.getElementById('commute-details').innerHTML = [
                 createCommuteCard(prop, 'work_Mike', "Mike's Work (Transit)"),
                 createCommuteCard(prop, 'work_Xixi', "Xixi's Work (Transit)"),
                 createCommuteCard(prop, 'school_Hana', "Hana's School (Drive)", 'drive'),
                 createCommuteCard(prop, 'school_Hana', "Hana's School (Transit)")
+            ].join('');
+
+            const busRoutes = prop.BUS_ROUTES_NEARBY ? String(prop.BUS_ROUTES_NEARBY).split(',').join(', ') : null;
+            const busLabel = prop.BUS_STOPS_NEARBY != null ? `Bus routes within &frac14; mi (${prop.BUS_STOPS_NEARBY} stops)` : 'Bus routes within &frac14; mi';
+            const nearL = prop.NEAR_L_TRACKS === true || prop.NEAR_L_TRACKS === 'True';
+            document.getElementById('location-details').innerHTML = [
+                locationRow('Faces', prop.FACING),
+                locationRow('Metra station', prop.METRA_CLOSEST ? `${prop.METRA_CLOSEST} (${prop.METRA_CLOSEST_DST} mi)` : null),
+                locationRow(busLabel, busRoutes),
+                locationRow('Distance to L tracks', prop.L_TRACK_DST_MI != null ? `${prop.L_TRACK_DST_MI} mi${nearL ? ' — very close (train noise)' : ''}` : null, nearL),
+                locationRow("O'Hare jet noise", prop.OHARE_NOISE, typeof prop.OHARE_NOISE === 'string' && prop.OHARE_NOISE.startsWith('High')),
             ].join('');
 
             document.getElementById('crime-details').innerHTML = [
@@ -344,6 +385,16 @@
                 { type: 'CHICAGO_PUBLIC_LIBRARY', name: 'Libraries' }, { type: 'TRADER_JOES', name: "Trader Joe's" }
             ].map(amenity => createAmenityButton(prop, amenity.name, amenity.type)).join('');
             
+            const schoolRating = prop.NEAREST_ELEMENTARY_RATING ? ` · ${prop.NEAREST_ELEMENTARY_RATING}` : '';
+            document.getElementById('nearest-school').textContent = prop.NEAREST_ELEMENTARY
+                ? `${prop.NEAREST_ELEMENTARY}${schoolRating} (${prop.NEAREST_ELEMENTARY_DST} mi)` : 'N/A';
+            const trend = prop.CRIME_TREND_PCT;
+            const trendEl = document.getElementById('crime-trend');
+            trendEl.textContent = trend != null ? `${trend > 0 ? '+' : ''}${trend}%` : 'N/A';
+            trendEl.className = 'text-xl font-semibold ' + (trend != null ? (trend <= 0 ? 'text-green-700' : 'text-red-700') : '');
+            document.getElementById('rodent-count').textContent = prop.RODENT_NUM != null ? prop.RODENT_NUM : 'N/A';
+            document.getElementById('assessor-value').textContent = prop.ASSESSOR_MARKET_VALUE != null ? formatCurrency(prop.ASSESSOR_MARKET_VALUE) : 'N/A';
+
             document.getElementById('per-capita-income').textContent = formatCurrency(prop['PER CAPITA INCOME ']);
             document.getElementById('poverty-rate').textContent = formatPercentage(prop['PERCENT HOUSEHOLDS BELOW POVERTY']);
             document.getElementById('hardship-index').textContent = prop['HARDSHIP INDEX'] || 'N/A';
@@ -374,6 +425,14 @@
                 </div>
                 ${walkHtml}
                 ${stepsHtml}
+            </div>`;
+        }
+
+        function locationRow(label, value, warn = false) {
+            if (value == null || value === '') return '';
+            return `<div class="flex justify-between items-baseline bg-slate-50 px-4 py-3 rounded-lg">
+                <span class="text-sm text-slate-500 pr-4 shrink-0">${label}</span>
+                <span class="text-sm font-medium text-right ${warn ? 'text-amber-700' : 'text-slate-800'}">${value}</span>
             </div>`;
         }
 
