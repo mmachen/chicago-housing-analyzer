@@ -104,10 +104,14 @@
                         </select>
                     </div>
                     <div>
-                        <label for="filterType" class="text-sm font-medium text-slate-600">Property Type</label>
-                        <select id="filterType" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
-                            <option value="">All Types</option>
-                        </select>
+                        <span class="text-sm font-medium text-slate-600">Property Type <span class="text-slate-400 font-normal">(none = all)</span></span>
+                        <div id="filterTypeGroup" class="mt-1 space-y-1"></div>
+                    </div>
+                    <div>
+                        <label for="filterDrive" class="text-sm font-medium text-slate-600">Max School Drive: <span id="filterDriveLabel" class="font-semibold text-indigo-600">Any</span></label>
+                        <input type="range" id="filterDrive" min="10" max="45" step="5" value="45"
+                               class="mt-2 block w-full accent-indigo-600">
+                        <div class="flex justify-between text-xs text-slate-400"><span>10 min</span><span>Any</span></div>
                     </div>
                     <div>
                         <label for="filterSort" class="text-sm font-medium text-slate-600">Sort By</label>
@@ -285,8 +289,13 @@
             const locationSelect = document.getElementById('filterLocation');
             data.locations.forEach(loc => locationSelect.innerHTML += `<option value="${loc}">${loc}</option>`);
 
-            const typeSelect = document.getElementById('filterType');
-            (data.property_types || []).forEach(t => typeSelect.innerHTML += `<option value="${t}">${t}</option>`);
+            const typeGroup = document.getElementById('filterTypeGroup');
+            typeGroup.innerHTML = (data.property_types || []).map(t => `
+                <label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                    <input type="checkbox" value="${t}" class="filter-type-cb rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+                    ${t}
+                </label>`).join('');
+            typeGroup.addEventListener('change', loadProperties);
 
             const priceSelect = document.getElementById('filterPrice');
             data.price_ranges.forEach(([minv, maxv]) => {
@@ -510,13 +519,16 @@
 
         // --- Data Fetching & Handling ---
         function loadProperties() {
-            const params = new URLSearchParams({ location: document.getElementById('filterLocation').value, property_type: document.getElementById('filterType').value, sort_by: document.getElementById('filterSort').value, sort_order: document.getElementById('filterOrder').value });
+            const selectedTypes = Array.from(document.querySelectorAll('.filter-type-cb:checked')).map(cb => cb.value);
+            const params = new URLSearchParams({ location: document.getElementById('filterLocation').value, property_type: selectedTypes.join(','), sort_by: document.getElementById('filterSort').value, sort_order: document.getElementById('filterOrder').value });
             const price = document.getElementById('filterPrice').value;
             if (price) {
                 const [minv, maxv] = price.split('-');
                 params.set('price_min', minv);
                 params.set('price_max', maxv);
             }
+            const maxDrive = document.getElementById('filterDrive').value;
+            if (Number(maxDrive) < 45) params.set('max_drive', maxDrive);
             fetch(`/api/properties?${params.toString()}`).then(res => res.json()).then(data => {
                 properties = data;
                 renderPropertyList(properties);
@@ -603,14 +615,22 @@
             initMap();
             loadInitialData();
             
-            ['filterLocation', 'filterPrice', 'filterType', 'filterSort', 'filterOrder'].forEach(id => {
+            ['filterLocation', 'filterPrice', 'filterSort', 'filterOrder'].forEach(id => {
                 document.getElementById(id).addEventListener('change', loadProperties);
             });
+
+            const driveSlider = document.getElementById('filterDrive');
+            const driveLabel = document.getElementById('filterDriveLabel');
+            const driveText = v => Number(v) < 45 ? `≤ ${v} min` : 'Any';
+            driveSlider.addEventListener('input', () => { driveLabel.textContent = driveText(driveSlider.value); });
+            driveSlider.addEventListener('change', loadProperties);
 
             document.getElementById('resetFilters').addEventListener('click', () => {
                 document.getElementById('filterLocation').value = '';
                 document.getElementById('filterPrice').value = '';
-                document.getElementById('filterType').value = '';
+                document.querySelectorAll('.filter-type-cb').forEach(cb => cb.checked = false);
+                driveSlider.value = 45;
+                driveLabel.textContent = 'Any';
                 document.getElementById('filterSort').value = 'OVERALL_SCORE';
                 document.getElementById('filterOrder').value = 'desc';
                 loadProperties();

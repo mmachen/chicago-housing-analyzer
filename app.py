@@ -103,9 +103,18 @@ def get_properties():
         filtered = df
         if location and location in filtered["LOCATION"].unique():
             filtered = filtered[filtered["LOCATION"] == location]
+        # Comma-separated list supports multi-selection in the UI.
         property_type = request.args.get("property_type", "")
         if property_type and "PROPERTY_TYPE" in filtered.columns:
-            filtered = filtered[filtered["PROPERTY_TYPE"] == property_type]
+            selected = [t for t in property_type.split(",") if t]
+            filtered = filtered[filtered["PROPERTY_TYPE"].isin(selected)]
+
+        # Hide homes whose school drive exceeds the slider; homes without
+        # drive data yet are kept visible.
+        max_drive = request.args.get("max_drive", type=float)
+        if max_drive is not None and "DRIVE_MINUTES_school_Hana" in filtered.columns:
+            drive = filtered["DRIVE_MINUTES_school_Hana"]
+            filtered = filtered[drive.isna() | (drive <= max_drive)]
         if price_min is not None:
             filtered = filtered[filtered["PRICE"] >= price_min]
         if price_max is not None:

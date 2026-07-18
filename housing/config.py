@@ -64,8 +64,13 @@ REDFIN_REGION_TYPE = 6  # 6 = city
 
 # Search filters applied server-side by Redfin. Garage must be filtered here
 # because the CSV export has no parking column.
+# To change the search: edit these values, then run
+#   python fetch_listings.py
+#   python build_dataset.py
+# (drop max_price entirely for no upper limit; new homes only get commute/
+# amenity data on a full build, which costs Google API calls per new home).
 REDFIN_SEARCH_FILTERS = {
-    "min_price": 700_000,
+    "min_price": 600_000,
     "max_price": 1_400_000,
     "num_beds": 3,   # minimum bedrooms
     "num_baths": 2,  # minimum bathrooms
