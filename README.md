@@ -143,8 +143,11 @@ cache and only compute what's missing. Useful options:
 - `--skip-commute` / `--skip-places` — skip the slow API sections.
 - `--mls 12345,67890` — only process specific properties by MLS ID.
 - `--w-commute 0.5 --w-crime 0.2` — adjust `OVERALL_SCORE` weights. The
-  commute score covers all three destinations; `--w-bars` and `--w-gun` are
-  penalties that push down homes near bars or gun incidents.
+  commute score checks each destination against the per-destination
+  target/max times in `COMMUTE_REQUIREMENTS` (`housing/config.py`) and takes
+  the worst one, so a single unacceptable commute sinks a home. `--w-bars`
+  and `--w-gun` are penalties that push down homes near bars or gun
+  incidents.
 - `--ttl-days 30` — how long cached API results stay valid.
 - `--force-crime` — recompute crime scores after refreshing crime data.
 

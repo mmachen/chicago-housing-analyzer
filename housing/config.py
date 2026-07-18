@@ -95,8 +95,16 @@ COMMUTE_DESTINATIONS = {
 # Destinations that also get a rush-hour driving estimate (DRIVE_TIME_<name>).
 DRIVING_DESTINATIONS = ("school_Hana",)
 
-# Destinations whose transit time feeds the commute part of OVERALL_SCORE.
-SCORED_COMMUTE_DESTINATIONS = ("work_Mike", "work_Xixi", "school_Hana")
+# Per-destination commute requirements, in minutes, for the commute part of
+# OVERALL_SCORE. A transit commute at or under "target" gets full credit;
+# credit falls linearly to zero at "max" (at or beyond max scores 0). The
+# home's commute score is its WORST destination score, so one unacceptable
+# commute sinks the home no matter how good the others are.
+COMMUTE_REQUIREMENTS = {
+    "work_Mike": {"target": 60, "max": 90},   # under 1h ideal, 1.5h unacceptable
+    "work_Xixi": {"target": 60, "max": 90},   # under 1h ideal, 1.5h unacceptable
+    "school_Hana": {"target": 30, "max": 60},  # under 30 min ideal
+}
 
 # CTA train lines flagged per commute (USES_<line>_LINE_<destination>).
 CTA_TRAIN_LINES = ("BROWN", "RED", "BLUE", "PINK", "GREEN", "ORANGE", "PURPLE")

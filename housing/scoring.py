@@ -6,10 +6,15 @@ then combined with user-supplied weights (see ``compute_overall_score``).
 
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 
-from housing.config import SCORED_AMENITIES, SCORED_COMMUTE_DESTINATIONS
+from housing.config import COMMUTE_REQUIREMENTS, SCORED_AMENITIES
 from housing.crime import CRIME_SCORE_COLUMNS
+
+_HOURS_RE = re.compile(r"(\d+(?:\.\d+)?)\s*hour")
+_MINS_RE = re.compile(r"(\d+(?:\.\d+)?)\s*min")
 
 
 def minmax_normalize(series: pd.Series, degenerate_fill: float) -> pd.Series:
@@ -24,26 +29,41 @@ def minmax_normalize(series: pd.Series, degenerate_fill: float) -> pd.Series:
     return (s - s_min) / denom
 
 
-def _extract_minutes(text) -> float | None:
-    """Parse the leading minutes value from a duration like '42 mins'."""
-    try:
-        if isinstance(text, str) and "min" in text:
-            return float(text.split()[0])
-    except (ValueError, IndexError):
+def _duration_to_minutes(text) -> float | None:
+    """Parse a Google duration like '42 mins', '1 hour 5 mins', or '2 hours'
+    into total minutes. (Naively taking the first number would read
+    '2 hours 3 mins' as 2 minutes.)"""
+    if not isinstance(text, str):
         return None
-    return None
+    minutes = 0.0
+    hours_match = _HOURS_RE.search(text)
+    if hours_match:
+        minutes += float(hours_match.group(1)) * 60
+    mins_match = _MINS_RE.search(text)
+    if mins_match:
+        minutes += float(mins_match.group(1))
+    return minutes if minutes > 0 else None
 
 
 def commute_score(df: pd.DataFrame) -> pd.Series:
-    """Score commutes: lower total transit time across the scored
-    destinations is better."""
-    total_minutes = sum(
-        (pd.to_numeric(df[f"COMMUTE_TIME_{dest}"].apply(_extract_minutes),
-                       errors="coerce").fillna(0.0)
-         for dest in SCORED_COMMUTE_DESTINATIONS),
-        start=pd.Series(0.0, index=df.index),
-    )
-    return 1 - minmax_normalize(total_minutes.replace(0, pd.NA), 0.5)
+    """Score commutes against the per-destination requirements in
+    ``COMMUTE_REQUIREMENTS``.
+
+    Each destination scores 1.0 at or under its target time, falling
+    linearly to 0.0 at its max. The home's commute score is the minimum
+    across destinations: every commute has to be acceptable, and one
+    terrible commute can't be offset by two great ones. Homes with no
+    commute data yet score NaN (filled neutrally later).
+    """
+    destination_scores = []
+    for dest, req in COMMUTE_REQUIREMENTS.items():
+        minutes = pd.to_numeric(
+            df[f"COMMUTE_TIME_{dest}"].apply(_duration_to_minutes),
+            errors="coerce")
+        over_target = (minutes - req["target"]).clip(lower=0)
+        score = 1 - over_target / (req["max"] - req["target"])
+        destination_scores.append(score.clip(lower=0.0, upper=1.0))
+    return pd.concat(destination_scores, axis=1).min(axis=1)
 
 
 def crime_safety_score(df: pd.DataFrame) -> pd.Series:
