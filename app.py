@@ -119,10 +119,14 @@ def _local_ip() -> str:
         return "unknown"
 
 
-if __name__ == "__main__":
+def main() -> None:
     print("\nAccess the application at:")
     print("  Local:   http://localhost:5000")
     print(f"  Network: http://{_local_ip()}:5000\n")
 
     debug = os.environ.get("FLASK_DEBUG", "0") == "1"
     app.run(host="0.0.0.0", port=5000, debug=debug)
+
+
+if __name__ == "__main__":
+    main()

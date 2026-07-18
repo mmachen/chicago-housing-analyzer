@@ -141,6 +141,14 @@ DEFAULT_CACHE_TTL_DAYS = 14
 
 # Positive components sum to 1; "bars" and "gun" are penalties subtracted
 # from the total (avoid homes near bars and gun incidents).
+#
+# Two ways to tune these:
+#   1. Per run, via CLI flags on build_dataset.py or refresh_all.py:
+#        python build_dataset.py --w-gun 0.25    # punish gun incidents harder
+#        python build_dataset.py --w-bars 0.15   # punish bar density harder
+#        python build_dataset.py --w-commute 0.5 # emphasize commutes
+#      (recompute for free by adding: --skip-commute --skip-places)
+#   2. Permanently, by editing the values below.
 DEFAULT_SCORE_WEIGHTS = {
     "commute": 0.4,
     "crime": 0.3,

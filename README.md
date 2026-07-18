@@ -97,6 +97,24 @@ python build_dataset.py --skip-commute --skip-places --force-crime
 
 ## Usage
 
+### One-command refresh (recommended)
+
+`refresh_all.py` runs the whole ongoing routine — pull listings, refresh
+crime data, rebuild and re-score — in one go:
+
+```bash
+python refresh_all.py               # full refresh (Google APIs for new homes only)
+python refresh_all.py --no-google   # completely free: skip commute/amenity APIs
+python refresh_all.py --serve       # refresh, then start the dashboard
+```
+
+Score-weight flags pass straight through, e.g. punish homes near gun
+incidents harder with `python refresh_all.py --w-gun 0.25`. To re-score with
+new weights without downloading anything, use
+`python build_dataset.py --skip-commute --skip-places --w-gun 0.25`.
+
+The individual steps, if you'd rather run them separately:
+
 ### 0. Refresh listings
 
 Pull the latest active listings matching the search in
