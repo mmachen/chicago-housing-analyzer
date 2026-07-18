@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 from flask import Flask, jsonify, render_template, request
 
-from housing.config import FINAL_DATA_CSV
+from housing.config import COMMUTE_DESTINATIONS, DESTINATION_MARKERS, FINAL_DATA_CSV
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -73,7 +73,13 @@ def get_initial_data():
                      if not df.empty and "LOCATION" in df.columns else [])
     except Exception:
         locations = []
-    return jsonify({"locations": locations, "price_ranges": PRICE_RANGES})
+
+    destinations = [
+        {"name": name, "address": COMMUTE_DESTINATIONS.get(name, ""), **marker}
+        for name, marker in DESTINATION_MARKERS.items()
+    ]
+    return jsonify({"locations": locations, "price_ranges": PRICE_RANGES,
+                    "destinations": destinations})
 
 
 @app.route("/api/properties")

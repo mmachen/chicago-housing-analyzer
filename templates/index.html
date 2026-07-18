@@ -54,6 +54,21 @@
         #amenityModal {
             z-index: 2000;
         }
+
+        /* Commute destination markers (Mike's/Xixi's work, Hana's school) */
+        .destination-marker {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            border-radius: 9999px;
+            background: white;
+            border: 2px solid #4f46e5;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+            font-size: 18px;
+            line-height: 1;
+        }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800">
@@ -439,8 +454,28 @@
         function loadInitialData() {
             fetch('/api/initial-data').then(res => res.json()).then(data => {
                 populateFilters(data);
+                addDestinationMarkers(data.destinations);
                 loadProperties();
             }).catch(error => console.error("Error loading initial data:", error));
+        }
+
+        // Permanent markers for the commute destinations. Added directly to
+        // the map (not markerGroup) so property-filter refreshes never
+        // remove them.
+        function addDestinationMarkers(destinations) {
+            (destinations || []).forEach(dest => {
+                if (dest.lat == null || dest.lon == null) return;
+                const icon = L.divIcon({
+                    className: 'destination-marker',
+                    html: dest.icon,
+                    iconSize: [34, 34],
+                    iconAnchor: [17, 17],
+                    popupAnchor: [0, -20]
+                });
+                const marker = L.marker([dest.lat, dest.lon], { icon: icon, zIndexOffset: 1000 }).addTo(map);
+                marker.bindTooltip(dest.label, { direction: 'top', offset: [0, -20] });
+                marker.bindPopup(`<div class="font-semibold">${dest.icon} ${dest.label}</div>${dest.address}`);
+            });
         }
 
         // --- Event Handlers ---

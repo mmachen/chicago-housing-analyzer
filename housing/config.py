@@ -95,6 +95,18 @@ COMMUTE_DESTINATIONS = {
 # Destinations that also get a rush-hour driving estimate (DRIVE_TIME_<name>).
 DRIVING_DESTINATIONS = ("school_Hana",)
 
+# Dashboard map markers for the destinations. Coordinates were geocoded once
+# (OpenStreetMap Nominatim) so the dashboard makes no geocoding API calls;
+# update them if a destination address in COMMUTE_DESTINATIONS changes.
+DESTINATION_MARKERS = {
+    "work_Mike": {"label": "Mike's Work", "icon": "\U0001F4BC",  # briefcase
+                  "lat": 41.877115, "lon": -87.639991},
+    "work_Xixi": {"label": "Xixi's Work", "icon": "\U0001F3E2",  # office
+                  "lat": 41.885287, "lon": -87.653409},
+    "school_Hana": {"label": "Hana's School", "icon": "\U0001F3EB",  # school
+                    "lat": 41.971171, "lon": -87.709471},
+}
+
 # Per-destination commute requirements, in minutes, for the commute part of
 # OVERALL_SCORE. A transit commute at or under "target" gets full credit;
 # credit falls linearly to zero at "max" (at or beyond max scores 0). The
