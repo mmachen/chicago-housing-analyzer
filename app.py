@@ -1,102 +1,128 @@
-from flask import Flask, render_template, jsonify, request
-import pandas as pd
-import numpy as np
+"""Flask dashboard for browsing the enriched housing dataset.
+
+Serves the property list, filters, and map at http://localhost:5000. Expects
+output/final_data.csv to exist (run build_dataset.py first).
+
+Set FLASK_DEBUG=1 to enable debug mode and auto-reload during development.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
 import socket
+
+import numpy as np
+import pandas as pd
+from flask import Flask, jsonify, render_template, request
+
+from housing.config import FINAL_DATA_CSV
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+log = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Load data
-try:
-    df = pd.read_csv('output/final_data.csv')
-    print(f"Successfully loaded {len(df)} properties from output/final_data.csv")
-except Exception as e:
-    print(f"Error loading output/final_data.csv: {str(e)}")
-    df = pd.DataFrame()  # Empty DataFrame as fallback
+# Upper bound sentinel meaning "$1M and above" in the price filter.
+PRICE_CAP_SENTINEL = 1_000_001
 
-@app.route('/')
+PRICE_RANGES = [
+    (0, 300_000), (300_000, 400_000), (400_000, 500_000), (500_000, 600_000),
+    (600_000, 700_000), (700_000, 800_000), (800_000, 900_000),
+    (900_000, 1_000_000), (1_000_000, PRICE_CAP_SENTINEL),
+]
+
+
+def load_properties() -> pd.DataFrame:
+    try:
+        df = pd.read_csv(FINAL_DATA_CSV)
+        log.info("Loaded %d properties from %s", len(df), FINAL_DATA_CSV)
+        return df
+    except Exception as e:
+        log.error("Could not load %s: %s -- run build_dataset.py first.",
+                  FINAL_DATA_CSV, e)
+        return pd.DataFrame()
+
+
+df = load_properties()
+
+
+def _to_json_safe_records(frame: pd.DataFrame) -> list[dict]:
+    """Convert a DataFrame to records with numpy/NaN values made JSON-safe."""
+    records = frame.to_dict("records")
+    for record in records:
+        for key, value in record.items():
+            if isinstance(value, (np.integer, np.floating)):
+                record[key] = value.item()
+            elif isinstance(value, np.ndarray):
+                record[key] = value.tolist()
+            elif pd.isna(value):
+                record[key] = None
+    return records
+
+
+@app.route("/")
 def index():
-    return render_template('index.html')
+    return render_template("index.html")
 
-@app.route('/api/initial-data')
+
+@app.route("/api/initial-data")
 def get_initial_data():
     try:
-        locations = sorted(df['LOCATION'].dropna().unique().astype(str).tolist()) if not df.empty and 'LOCATION' in df.columns else []
+        locations = (sorted(df["LOCATION"].dropna().unique().astype(str).tolist())
+                     if not df.empty and "LOCATION" in df.columns else [])
     except Exception:
         locations = []
-    
-    price_ranges = [
-        (0, 300000), (300000, 400000), (400000, 500000), (500000, 600000),
-        (600000, 700000), (700000, 800000), (800000, 900000), (900000, 1000000),
-        (1000000, 1000001)  # $1M+
-    ]
-    
-    return jsonify({
-        'locations': locations,
-        'price_ranges': price_ranges
-    })
+    return jsonify({"locations": locations, "price_ranges": PRICE_RANGES})
 
-@app.route('/api/properties')
+
+@app.route("/api/properties")
 def get_properties():
     try:
-        # Get filter parameters
-        location = request.args.get('location', '')
-        price_min = request.args.get('price_min', type=float)
-        price_max = request.args.get('price_max', type=float)
-        sort_by = request.args.get('sort_by', 'PRICE')
-        sort_order = request.args.get('sort_order', 'asc')
+        location = request.args.get("location", "")
+        price_min = request.args.get("price_min", type=float)
+        price_max = request.args.get("price_max", type=float)
+        sort_by = request.args.get("sort_by", "PRICE")
+        sort_order = request.args.get("sort_order", "asc")
 
-        # Start with all properties
-        filtered_df = df
-
-        # Apply filters
-        if location and location in filtered_df['LOCATION'].unique():
-            filtered_df = filtered_df[filtered_df['LOCATION'] == location]
-        
+        filtered = df
+        if location and location in filtered["LOCATION"].unique():
+            filtered = filtered[filtered["LOCATION"] == location]
         if price_min is not None:
-            filtered_df = filtered_df[filtered_df['PRICE'] >= price_min]
-        
+            filtered = filtered[filtered["PRICE"] >= price_min]
         if price_max is not None:
-            if price_max == 1000001:  # Special case for $1M+
-                filtered_df = filtered_df[filtered_df['PRICE'] >= 1000000]
+            if price_max == PRICE_CAP_SENTINEL:
+                filtered = filtered[filtered["PRICE"] >= 1_000_000]
             else:
-                filtered_df = filtered_df[filtered_df['PRICE'] <= price_max]
+                filtered = filtered[filtered["PRICE"] <= price_max]
 
-        # Sort (safely). Allow sorting by OVERALL_SCORE, compute if present.
-        if sort_by not in filtered_df.columns:
-            sort_by = 'PRICE'
-        ascending = (str(sort_order).lower() != 'desc')
+        if sort_by not in filtered.columns:
+            sort_by = "PRICE"
+        ascending = str(sort_order).lower() != "desc"
         try:
-            filtered_df = filtered_df.sort_values(by=sort_by, ascending=ascending)
+            filtered = filtered.sort_values(by=sort_by, ascending=ascending)
         except Exception:
-            # Fallback to PRICE if sort fails due to dtype issues
-            if 'PRICE' in filtered_df.columns:
-                filtered_df = filtered_df.sort_values(by='PRICE', ascending=ascending)
+            # Fall back to PRICE if the requested column has mixed dtypes.
+            if "PRICE" in filtered.columns:
+                filtered = filtered.sort_values(by="PRICE", ascending=ascending)
 
-        # Convert to list of dictionaries
-        properties = filtered_df.to_dict('records')
-        
-        # Convert numpy types to Python native types
-        for prop in properties:
-            for key, value in prop.items():
-                if isinstance(value, (np.integer, np.floating)):
-                    prop[key] = value.item()
-                elif isinstance(value, np.ndarray):
-                    prop[key] = value.tolist()
-                elif pd.isna(value):
-                    prop[key] = None
-
-        return jsonify(properties)
+        return jsonify(_to_json_safe_records(filtered))
     except Exception as e:
-        print(f"Error in get_properties: {str(e)}")
+        log.error("Error in get_properties: %s", e)
         return jsonify([])
 
-if __name__ == '__main__':
-    # Get local IP address
-    hostname = socket.gethostname()
-    local_ip = socket.gethostbyname(hostname)
-    print(f"\nLocal IP address: {local_ip}")
-    print("Access the application at:")
-    print(f"  Local:   http://localhost:5000")
-    print(f"  Network: http://{local_ip}:5000\n")
-    
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+
+def _local_ip() -> str:
+    try:
+        return socket.gethostbyname(socket.gethostname())
+    except OSError:
+        return "unknown"
+
+
+if __name__ == "__main__":
+    print("\nAccess the application at:")
+    print("  Local:   http://localhost:5000")
+    print(f"  Network: http://{_local_ip()}:5000\n")
+
+    debug = os.environ.get("FLASK_DEBUG", "0") == "1"
+    app.run(host="0.0.0.0", port=5000, debug=debug)

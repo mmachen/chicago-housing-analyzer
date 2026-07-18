@@ -1,100 +1,114 @@
 # Chicago Housing Analysis Dashboard
 
-This project is a comprehensive tool for analyzing real estate properties in Chicago. It aggregates data from multiple sources, including Redfin listings, Google Maps APIs (for commute times and nearby amenities), and public Chicago datasets (for crime, demographics, and socioeconomic indicators).
-
-The data is processed into a single, enriched dataset, and a weighted `OVERALL_SCORE` is calculated for each property based on user-defined preferences. The results are then served through a Flask-based web dashboard for interactive filtering, sorting, and visualization on a map.
+A tool for analyzing real-estate listings in Chicago. It enriches a Redfin
+export with commute times and nearby amenities (Google Maps APIs) and with
+crime, affordable-housing, socioeconomic, and language data from Chicago's
+open data portal, then scores every property with a weighted `OVERALL_SCORE`.
+A Flask dashboard serves the results for interactive filtering, sorting, and
+map visualization.
 
 ## Features
 
-- **Data Aggregation**: Combines property data with commute times, nearby amenities, crime statistics, and demographic information.
-- **Custom Scoring**: Calculates a weighted `OVERALL_SCORE` based on commute, safety, amenities, and value.
-- **API Caching**: Uses a local SQLite database to cache Google Maps API calls, saving time and money on subsequent runs.
-- **Interactive Dashboard**: A web interface built with Flask and Tailwind CSS to browse, filter, and view property details.
-- **Map Visualization**: Displays properties on a Leaflet map with overlays for CTA train lines.
+- **Data aggregation** — combines listing data with commutes, amenities, crime
+  statistics, and demographics into one dataset (`output/final_data.csv`).
+- **Custom scoring** — weighted `OVERALL_SCORE` from commute, safety,
+  amenities, and value (price per sqft); weights are CLI-tunable.
+- **API caching** — Google Maps responses are cached in SQLite with a TTL, so
+  re-runs only pay for new or stale data.
+- **Interactive dashboard** — Flask + Tailwind UI to browse, filter, and view
+  property details, with a Leaflet map and CTA train-line overlays.
 
---- 
+## Project structure
 
-## Setup and Installation
-
-Follow these steps to get the project running on your local machine.
-
-### 1. Prerequisites
-- Python 3.8 or newer
-- Git
-
-### 2. Clone the Repository
-
-```bash
-git clone <your-repository-url>
-cd housing_app
+```
+housing_app/
+├── app.py                  # Flask web app (serves the dashboard)
+├── build_dataset.py        # Data pipeline (builds output/final_data.csv)
+├── housing/                # Library code
+│   ├── config.py           # Paths, destinations, amenities, weights
+│   ├── cache.py            # SQLite cache for API responses
+│   ├── geo.py              # Haversine distance helper
+│   ├── google_maps.py      # Directions / Places API wrappers
+│   ├── crime.py            # Crime-density scores
+│   ├── affordable_housing.py
+│   └── scoring.py          # Normalization + OVERALL_SCORE
+├── templates/index.html    # Dashboard front end
+├── data_sets/              # Input CSVs (see below)
+├── cache/                  # Generated: SQLite API cache
+└── output/                 # Generated: final_data.csv
 ```
 
-### 3. Install Dependencies
+## Setup
 
-It's recommended to use a virtual environment to manage dependencies.
+### 1. Install dependencies
+
+Requires Python 3.9+.
 
 ```bash
-# Create a virtual environment (e.g., venv)
 python -m venv venv
-
-# Activate it
-# On Windows:
-venv\Scripts\activate
-# On macOS/Linux:
-source venv/bin/activate
-
-# Install the required packages
+venv\Scripts\activate        # Windows
+source venv/bin/activate     # macOS/Linux
 pip install -r requirements.txt
 ```
 
-### 4. Set Up Google API Key
+### 2. Google Maps API key
 
-This project requires a Google Maps API key with the **Directions API**, **Places API**, and **Distance Matrix API** enabled.
+The pipeline needs a Google Maps API key with the **Directions**, **Places**,
+and **Distance Matrix** APIs enabled. Provide it either way:
 
-1.  Create a folder named `delete` in the project root.
-2.  Inside the `delete` folder, create a file named `input.txt`.
-3.  Paste your Google Maps API key into this file and save it. The project is configured via `.gitignore` to never commit this folder.
+- Set the `GOOGLE_MAPS_API_KEY` environment variable, **or**
+- Put the key in a file at `delete/input.txt` (the `delete/` folder is
+  gitignored and never committed).
 
-### 5. Add Data Files
+### 3. Data files
 
-Place your raw data CSV files into the `data_sets/` directory. The script expects the following files:
+Place the input CSVs in `data_sets/`:
 
-- `RedFin_raw_data.csv`
-- `socioeconomic_indicators.csv`
-- `languages_spoken.csv`
-- `Crimes_-_202103.csv`
-- `Affordable_Rental_Housing_Developments.csv`
+| File | Source |
+| --- | --- |
+| `RedFin_raw_data.csv` | Redfin search export |
+| `Crimes_-_202103.csv` | [Chicago Data Portal — Crimes](https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-Present/ijzp-q8t2) |
+| `Affordable_Rental_Housing_Developments.csv` | Chicago Data Portal |
+| `socioeconomic_indicators.csv` | Chicago Data Portal |
+| `languages_spoken.csv` | Chicago Data Portal |
 
----
+## Usage
 
-## How to Run
-
-The project has two main components: the data processing script and the web application.
-
-### 1. Run the Data Processing Script
-
-Execute `main_data.py` from your terminal to process the raw data and generate the `output/final_data.csv` file. This script can take a while to run, especially the first time, as it makes numerous API calls.
+### 1. Build the dataset
 
 ```bash
-python main_data.py
+python build_dataset.py
 ```
 
-You can use command-line arguments to customize the run:
-- `--skip-commute`: Skips the slow commute time calculations.
-- `--skip-places`: Skips the slow nearby amenities calculations.
-- `--mls 12345,67890`: Only process specific properties by their MLS ID.
-- `--w-commute 0.5 --w-crime 0.2`: Adjust the weights for the `OVERALL_SCORE` calculation.
+The first run makes many API calls and can take a while; later runs reuse the
+cache and only compute what's missing. Useful options:
 
-Run `python main_data.py --help` for a full list of options.
+- `--skip-commute` / `--skip-places` — skip the slow API sections.
+- `--mls 12345,67890` — only process specific properties by MLS ID.
+- `--w-commute 0.5 --w-crime 0.2` — adjust `OVERALL_SCORE` weights.
+- `--ttl-days 30` — how long cached API results stay valid.
 
-### 2. Run the Web Application
+Run `python build_dataset.py --help` for the full list.
 
-Once the `output/final_data.csv` file has been generated, you can start the Flask web server.
+### 2. Run the dashboard
 
 ```bash
 python app.py
 ```
 
-The application will be accessible at `http://localhost:5000` and on your local network.
+Open `http://localhost:5000` (also reachable on your local network). Set
+`FLASK_DEBUG=1` to enable auto-reload during development.
 
----
+## Roadmap
+
+Planned directions for the project:
+
+- **Fresh crime data** — pull current incidents from the Chicago Data Portal
+  API (Socrata) instead of a static monthly extract.
+- **Listing enrichment** — bring in additional listing sources and price
+  estimates (respecting each site's terms of service).
+- **Swipe-based review** — a like/dislike ("swipe") flow for rating homes,
+  with a learned likability score to surface the best matches first and
+  per-home highlights.
+- **Pairwise matching** — match users with similar likes/dislikes so they can
+  refer homes and features to each other.
