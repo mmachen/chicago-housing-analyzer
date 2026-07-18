@@ -15,7 +15,8 @@ from housing.crime import CRIME_SCORE_COLUMNS
 def minmax_normalize(series: pd.Series, degenerate_fill: float) -> pd.Series:
     """Scale a series to 0-1. If the series has no spread (or is all-NA),
     return a constant series of ``degenerate_fill``."""
-    s = series.astype(float)
+    # to_numeric handles pd.NA safely; plain astype(float) raises on NAType.
+    s = pd.to_numeric(series, errors="coerce").astype(float)
     s_min, s_max = s.min(), s.max()
     denom = s_max - s_min
     if pd.isna(s_min) or pd.isna(s_max) or denom == 0:
@@ -37,7 +38,8 @@ def commute_score(df: pd.DataFrame) -> pd.Series:
     """Score commutes: lower total transit time across the scored
     destinations is better."""
     total_minutes = sum(
-        (df[f"COMMUTE_TIME_{dest}"].apply(_extract_minutes).fillna(0)
+        (pd.to_numeric(df[f"COMMUTE_TIME_{dest}"].apply(_extract_minutes),
+                       errors="coerce").fillna(0.0)
          for dest in SCORED_COMMUTE_DESTINATIONS),
         start=pd.Series(0.0, index=df.index),
     )
@@ -68,12 +70,32 @@ def value_score(df: pd.DataFrame) -> pd.Series:
     return minmax_normalize(1 / price_per_sqft, 0.5)
 
 
+def bars_density_penalty(df: pd.DataFrame) -> pd.Series:
+    """Penalty for homes near many bars (0 = fewest bars, 1 = most)."""
+    return minmax_normalize(df["BARS_WALK_NUM"].fillna(0), 0.0)
+
+
+def gun_risk_penalty(df: pd.DataFrame) -> pd.Series:
+    """Penalty for homes near gun incidents (0 = safest, 1 = highest risk).
+
+    Gun crime already feeds crime_safety_score as one of six categories;
+    this dedicated penalty weights it more heavily on top of that.
+    """
+    return minmax_normalize(df["GUN_SCORE"].fillna(0), 0.0)
+
+
 def compute_overall_score(df: pd.DataFrame, weights: dict) -> pd.Series:
-    """Combine component scores using ``weights`` (keys: commute, crime,
-    amenities, price). Rows missing a component get a neutral value."""
+    """Combine component scores using ``weights``.
+
+    Positive components (commute, crime, amenities, price) add to the score;
+    penalty components (bars, gun) subtract from it. Rows missing a component
+    get a neutral value.
+    """
     return (
         weights["commute"] * commute_score(df).fillna(0.5)
         + weights["crime"] * crime_safety_score(df).fillna(0.5)
         + weights["amenities"] * amenities_score(df).fillna(0.0)
         + weights["price"] * value_score(df).fillna(0.0)
+        - weights.get("bars", 0.0) * bars_density_penalty(df).fillna(0.0)
+        - weights.get("gun", 0.0) * gun_risk_penalty(df).fillna(0.0)
     )

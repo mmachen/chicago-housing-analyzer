@@ -83,6 +83,12 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--w-price", type=float,
                         default=DEFAULT_SCORE_WEIGHTS["price"],
                         help="Weight for value (inverse price per sqft) (0-1).")
+    parser.add_argument("--w-bars", type=float,
+                        default=DEFAULT_SCORE_WEIGHTS["bars"],
+                        help="Penalty weight for nearby bar density (0-1).")
+    parser.add_argument("--w-gun", type=float,
+                        default=DEFAULT_SCORE_WEIGHTS["gun"],
+                        help="Penalty weight for nearby gun incidents (0-1).")
     args, _ = parser.parse_known_args(argv)
     return args
 
@@ -473,7 +479,8 @@ def main(argv=None) -> None:
     prop_df.drop(columns=legacy_cols, inplace=True, errors="ignore")
 
     weights = {"commute": args.w_commute, "crime": args.w_crime,
-               "amenities": args.w_amenities, "price": args.w_price}
+               "amenities": args.w_amenities, "price": args.w_price,
+               "bars": args.w_bars, "gun": args.w_gun}
     prop_df["OVERALL_SCORE"] = scoring.compute_overall_score(prop_df, weights)
 
     FINAL_DATA_CSV.parent.mkdir(parents=True, exist_ok=True)

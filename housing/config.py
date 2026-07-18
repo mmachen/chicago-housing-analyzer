@@ -44,6 +44,25 @@ REDFIN_COLUMNS = [
     "LATITUDE", "LONGITUDE",
 ]
 
+# --- Redfin search ---------------------------------------------------------
+
+# Region for automated listing pulls (redfin.com/city/29470/IL/Chicago).
+REDFIN_REGION_ID = 29470
+REDFIN_REGION_TYPE = 6  # 6 = city
+
+# Search filters applied server-side by Redfin. Garage must be filtered here
+# because the CSV export has no parking column.
+REDFIN_SEARCH_FILTERS = {
+    "min_price": 700_000,
+    "max_price": 1_400_000,
+    "num_beds": 3,   # minimum bedrooms
+    "num_baths": 2,  # minimum bathrooms
+    "gar": "true",   # must have a garage
+}
+
+# Property types to include: 1=house, 2=condo, 3=townhouse, 4=multi-family.
+REDFIN_PROPERTY_TYPES = "1,2,3,4"
+
 # --- Google Maps API -------------------------------------------------------
 
 API_KEY_ENV_VAR = "GOOGLE_MAPS_API_KEY"
@@ -77,7 +96,7 @@ COMMUTE_DESTINATIONS = {
 DRIVING_DESTINATIONS = ("school_Hana",)
 
 # Destinations whose transit time feeds the commute part of OVERALL_SCORE.
-SCORED_COMMUTE_DESTINATIONS = ("work_Mike", "work_Xixi")
+SCORED_COMMUTE_DESTINATIONS = ("work_Mike", "work_Xixi", "school_Hana")
 
 # CTA train lines flagged per commute (USES_<line>_LINE_<destination>).
 CTA_TRAIN_LINES = ("BROWN", "RED", "BLUE", "PINK", "GREEN", "ORANGE", "PURPLE")
@@ -120,9 +139,13 @@ AFFORDABLE_RADIUS_MILES = 0.5
 
 DEFAULT_CACHE_TTL_DAYS = 14
 
+# Positive components sum to 1; "bars" and "gun" are penalties subtracted
+# from the total (avoid homes near bars and gun incidents).
 DEFAULT_SCORE_WEIGHTS = {
     "commute": 0.4,
     "crime": 0.3,
     "amenities": 0.2,
     "price": 0.1,
+    "bars": 0.1,
+    "gun": 0.15,
 }
