@@ -104,6 +104,12 @@
                         </select>
                     </div>
                     <div>
+                        <label for="filterType" class="text-sm font-medium text-slate-600">Property Type</label>
+                        <select id="filterType" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                            <option value="">All Types</option>
+                        </select>
+                    </div>
+                    <div>
                         <label for="filterSort" class="text-sm font-medium text-slate-600">Sort By</label>
                         <select id="filterSort" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
                             <option value="OVERALL_SCORE">Best Match</option>
@@ -111,6 +117,8 @@
                             <option value="SQFT">Square Feet</option>
                             <option value="BEDS">Beds</option>
                             <option value="DAY_ON_MARKET">Days on Market</option>
+                            <option value="MAX_WALK_MINUTES">Commute Walking (max)</option>
+                            <option value="DRIVE_MINUTES_school_Hana">Hana School Drive</option>
                         </select>
                     </div>
                     <div>
@@ -261,6 +269,9 @@
             const locationSelect = document.getElementById('filterLocation');
             data.locations.forEach(loc => locationSelect.innerHTML += `<option value="${loc}">${loc}</option>`);
 
+            const typeSelect = document.getElementById('filterType');
+            (data.property_types || []).forEach(t => typeSelect.innerHTML += `<option value="${t}">${t}</option>`);
+
             const priceSelect = document.getElementById('filterPrice');
             data.price_ranges.forEach(([minv, maxv]) => {
                 const text = (maxv === 1000001) ? `${formatCurrency(minv)}+` : `${formatCurrency(minv)} - ${formatCurrency(maxv)}`;
@@ -316,8 +327,8 @@
             document.getElementById('commute-details').innerHTML = [
                 createCommuteCard(prop, 'work_Mike', "Mike's Work (Transit)"),
                 createCommuteCard(prop, 'work_Xixi', "Xixi's Work (Transit)"),
-                createCommuteCard(prop, 'school_Hana', "Hana's School (Transit)"),
-                createCommuteCard(prop, 'school_Hana', "Hana's School (Drive)", 'drive')
+                createCommuteCard(prop, 'school_Hana', "Hana's School (Drive)", 'drive'),
+                createCommuteCard(prop, 'school_Hana', "Hana's School (Transit)")
             ].join('');
 
             document.getElementById('crime-details').innerHTML = [
@@ -342,7 +353,12 @@
         function createCommuteCard(prop, key, title, mode = 'transit') {
             const time = (mode === 'drive') ? prop[`DRIVE_TIME_${key}`] : prop[`COMMUTE_TIME_${key}`];
             const steps = prop[`COMMUTE_STEPS_${key}`];
+            const walkTime = prop[`WALKING_TIME_${key}`];
             if (!time) return '';
+            let walkHtml = '';
+            if (mode === 'transit' && walkTime) {
+                walkHtml = `<p class="text-xs font-medium text-amber-700 mt-1">&#128694; ${walkTime} of walking</p>`;
+            }
             let stepsHtml = '';
             if (mode === 'transit' && steps) {
                 const individualSteps = steps.split(', ').map(step => `<li>${step}</li>`).join('');
@@ -353,6 +369,7 @@
                     <p class="font-semibold text-slate-800">${title}</p>
                     <div class="flex items-center text-sm font-medium">${time}</div>
                 </div>
+                ${walkHtml}
                 ${stepsHtml}
             </div>`;
         }
@@ -431,7 +448,7 @@
 
         // --- Data Fetching & Handling ---
         function loadProperties() {
-            const params = new URLSearchParams({ location: document.getElementById('filterLocation').value, sort_by: document.getElementById('filterSort').value, sort_order: document.getElementById('filterOrder').value });
+            const params = new URLSearchParams({ location: document.getElementById('filterLocation').value, property_type: document.getElementById('filterType').value, sort_by: document.getElementById('filterSort').value, sort_order: document.getElementById('filterOrder').value });
             const price = document.getElementById('filterPrice').value;
             if (price) {
                 const [minv, maxv] = price.split('-');
@@ -524,13 +541,14 @@
             initMap();
             loadInitialData();
             
-            ['filterLocation', 'filterPrice', 'filterSort', 'filterOrder'].forEach(id => {
+            ['filterLocation', 'filterPrice', 'filterType', 'filterSort', 'filterOrder'].forEach(id => {
                 document.getElementById(id).addEventListener('change', loadProperties);
             });
-            
+
             document.getElementById('resetFilters').addEventListener('click', () => {
                 document.getElementById('filterLocation').value = '';
                 document.getElementById('filterPrice').value = '';
+                document.getElementById('filterType').value = '';
                 document.getElementById('filterSort').value = 'OVERALL_SCORE';
                 document.getElementById('filterOrder').value = 'desc';
                 loadProperties();

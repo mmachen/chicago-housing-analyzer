@@ -74,11 +74,20 @@ def get_initial_data():
     except Exception:
         locations = []
 
+    try:
+        property_types = (sorted(df["PROPERTY_TYPE"].dropna().unique()
+                                 .astype(str).tolist())
+                          if not df.empty and "PROPERTY_TYPE" in df.columns
+                          else [])
+    except Exception:
+        property_types = []
+
     destinations = [
         {"name": name, "address": COMMUTE_DESTINATIONS.get(name, ""), **marker}
         for name, marker in DESTINATION_MARKERS.items()
     ]
     return jsonify({"locations": locations, "price_ranges": PRICE_RANGES,
+                    "property_types": property_types,
                     "destinations": destinations})
 
 
@@ -94,6 +103,9 @@ def get_properties():
         filtered = df
         if location and location in filtered["LOCATION"].unique():
             filtered = filtered[filtered["LOCATION"] == location]
+        property_type = request.args.get("property_type", "")
+        if property_type and "PROPERTY_TYPE" in filtered.columns:
+            filtered = filtered[filtered["PROPERTY_TYPE"] == property_type]
         if price_min is not None:
             filtered = filtered[filtered["PRICE"] >= price_min]
         if price_max is not None:

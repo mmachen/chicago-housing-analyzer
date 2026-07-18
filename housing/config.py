@@ -108,21 +108,23 @@ DESTINATION_MARKERS = {
 }
 
 # Per-destination commute requirements, in minutes, for the commute part of
-# OVERALL_SCORE. A transit commute at or under "target" gets full credit;
-# credit falls linearly to zero at "max" (at or beyond max scores 0). The
-# home's commute score is its WORST destination score, so one unacceptable
-# commute sinks the home no matter how good the others are.
+# OVERALL_SCORE. A commute at or under "target" gets full credit; credit
+# falls linearly to zero at "max" (at or beyond max scores 0). The home's
+# commute score is its WORST destination score, so one unacceptable commute
+# sinks the home no matter how good the others are. "mode" picks which
+# measured time is judged: "transit" (COMMUTE_TIME) or "drive" (DRIVE_TIME).
 COMMUTE_REQUIREMENTS = {
-    "work_Mike": {"target": 60, "max": 90},   # under 1h ideal, 1.5h unacceptable
-    "work_Xixi": {"target": 60, "max": 90},   # under 1h ideal, 1.5h unacceptable
-    "school_Hana": {"target": 30, "max": 60},  # under 30 min ideal
+    "work_Mike": {"target": 60, "max": 90, "mode": "transit"},
+    "work_Xixi": {"target": 60, "max": 90, "mode": "transit"},
+    "school_Hana": {"target": 30, "max": 60, "mode": "drive"},  # driven to school
 }
 
 # CTA train lines flagged per commute (USES_<line>_LINE_<destination>).
 CTA_TRAIN_LINES = ("BROWN", "RED", "BLUE", "PINK", "GREEN", "ORANGE", "PURPLE")
 
 # Bump to force a refresh of all commute data on the next pipeline run.
-COMMUTE_LOGIC_VERSION = 2
+# v3: step summaries now include board/exit stops and per-step durations.
+COMMUTE_LOGIC_VERSION = 3
 
 # --- Amenities -------------------------------------------------------------
 

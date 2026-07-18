@@ -63,7 +63,8 @@ def retry_on_api_error(max_retries: int = 3, initial_delay: float = 1):
 
 
 def _transit_step_instruction(step: dict) -> tuple[str, str, str]:
-    """Build a readable instruction for a transit step.
+    """Build a readable instruction for a transit step, including where to
+    board and where to exit.
 
     Returns (instruction, line_name_lower, line_short_name_lower).
     """
@@ -74,6 +75,8 @@ def _transit_step_instruction(step: dict) -> tuple[str, str, str]:
     line_name = line.get("name", "")
     line_short_name = line.get("short_name", "")
     headsign = details.get("headsign", "")
+    board_stop = (details.get("departure_stop") or {}).get("name", "")
+    exit_stop = (details.get("arrival_stop") or {}).get("name", "")
 
     parts = ["Take"]
     if vehicle_type == "BUS" and line_short_name:
@@ -85,7 +88,11 @@ def _transit_step_instruction(step: dict) -> tuple[str, str, str]:
     if headsign:
         parts.append(f"towards {headsign}")
 
-    return " ".join(parts), line_name.lower(), line_short_name.lower()
+    instruction = " ".join(parts)
+    if board_stop and exit_stop:
+        instruction += f" · board at {board_stop} · exit at {exit_stop}"
+
+    return instruction, line_name.lower(), line_short_name.lower()
 
 
 @retry_on_api_error()
@@ -131,8 +138,16 @@ def get_directions(gmaps: googlemaps.Client, origin: str, destination: str,
                 line_flags["BROWN"] = True
         elif step["travel_mode"] == "WALKING":
             total_walking_seconds += step["duration"]["value"]
+            # Google appends full address parts after a comma; keep it short.
+            instruction = instruction.split(",")[0]
 
-        steps.append(instruction)
+        duration_text = (step.get("duration") or {}).get("text")
+        if duration_text:
+            instruction = f"{instruction} ({duration_text})"
+
+        # COMMUTE_STEPS is comma-joined and split on ', ' by the dashboard,
+        # so a single step must never contain that separator itself.
+        steps.append(instruction.replace(", ", " / "))
 
     walking_time = None
     if mode == "transit" and total_walking_seconds > 0:

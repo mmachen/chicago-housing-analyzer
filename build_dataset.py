@@ -29,6 +29,7 @@ from housing.config import (
     CACHE_DB,
     COMMUTE_DESTINATIONS,
     COMMUTE_LOGIC_VERSION,
+    COMMUTE_REQUIREMENTS,
     CRIME_RECENT_CSV,
     CTA_TRAIN_LINES,
     DEFAULT_CACHE_TTL_DAYS,
@@ -477,6 +478,20 @@ def main(argv=None) -> None:
     legacy_cols = [c for c in prop_df.columns
                    if "_DRIVE" in c or "_SECOND_CLOSEST" in c]
     prop_df.drop(columns=legacy_cols, inplace=True, errors="ignore")
+
+    # Numeric commute columns so the dashboard can sort on them.
+    for dest in COMMUTE_REQUIREMENTS:
+        prop_df[f"WALK_MINUTES_{dest}"] = pd.to_numeric(
+            prop_df[f"WALKING_TIME_{dest}"].apply(scoring.duration_to_minutes),
+            errors="coerce")
+    for dest in DRIVING_DESTINATIONS:
+        prop_df[f"DRIVE_MINUTES_{dest}"] = pd.to_numeric(
+            prop_df[f"DRIVE_TIME_{dest}"].apply(scoring.duration_to_minutes),
+            errors="coerce")
+    transit_walk_cols = [f"WALK_MINUTES_{dest}"
+                         for dest, req in COMMUTE_REQUIREMENTS.items()
+                         if req.get("mode") != "drive"]
+    prop_df["MAX_WALK_MINUTES"] = prop_df[transit_walk_cols].max(axis=1)
 
     weights = {"commute": args.w_commute, "crime": args.w_crime,
                "amenities": args.w_amenities, "price": args.w_price,

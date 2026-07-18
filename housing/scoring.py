@@ -29,7 +29,7 @@ def minmax_normalize(series: pd.Series, degenerate_fill: float) -> pd.Series:
     return (s - s_min) / denom
 
 
-def _duration_to_minutes(text) -> float | None:
+def duration_to_minutes(text) -> float | None:
     """Parse a Google duration like '42 mins', '1 hour 5 mins', or '2 hours'
     into total minutes. (Naively taking the first number would read
     '2 hours 3 mins' as 2 minutes.)"""
@@ -53,13 +53,15 @@ def commute_score(df: pd.DataFrame) -> pd.Series:
     linearly to 0.0 at its max. The home's commute score is the minimum
     across destinations: every commute has to be acceptable, and one
     terrible commute can't be offset by two great ones. Homes with no
-    commute data yet score NaN (filled neutrally later).
+    commute data yet score NaN (filled neutrally later). Each requirement's
+    "mode" picks the judged time: transit or driving.
     """
     destination_scores = []
     for dest, req in COMMUTE_REQUIREMENTS.items():
-        minutes = pd.to_numeric(
-            df[f"COMMUTE_TIME_{dest}"].apply(_duration_to_minutes),
-            errors="coerce")
+        col = (f"DRIVE_TIME_{dest}" if req.get("mode") == "drive"
+               else f"COMMUTE_TIME_{dest}")
+        minutes = pd.to_numeric(df[col].apply(duration_to_minutes),
+                                errors="coerce")
         over_target = (minutes - req["target"]).clip(lower=0)
         score = 1 - over_target / (req["max"] - req["target"])
         destination_scores.append(score.clip(lower=0.0, upper=1.0))
