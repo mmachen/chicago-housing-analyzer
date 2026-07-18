@@ -21,13 +21,19 @@ OUTPUT_DIR = PROJECT_ROOT / "output"
 CACHE_DIR = PROJECT_ROOT / "cache"
 
 REDFIN_RAW_CSV = DATA_DIR / "RedFin_raw_data.csv"
-CRIME_CSV = DATA_DIR / "Crimes_-_202103.csv"
+CRIME_CSV = DATA_DIR / "Crimes_-_202103.csv"  # static fallback extract
+CRIME_RECENT_CSV = DATA_DIR / "Crimes_recent.csv"  # written by update_crime_data.py
 AFFORDABLE_HOUSING_CSV = DATA_DIR / "Affordable_Rental_Housing_Developments.csv"
 SOCIOECONOMIC_CSV = DATA_DIR / "socioeconomic_indicators.csv"
 LANGUAGES_CSV = DATA_DIR / "languages_spoken.csv"
 
 FINAL_DATA_CSV = OUTPUT_DIR / "final_data.csv"
 CACHE_DB = CACHE_DIR / "cache.db"
+
+
+def crime_csv_path() -> Path:
+    """Prefer the refreshed portal download; fall back to the static extract."""
+    return CRIME_RECENT_CSV if CRIME_RECENT_CSV.exists() else CRIME_CSV
 
 # Column names assigned to the raw Redfin export, in file order.
 REDFIN_COLUMNS = [

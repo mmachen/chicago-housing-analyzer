@@ -29,7 +29,7 @@ from housing.config import (
     CACHE_DB,
     COMMUTE_DESTINATIONS,
     COMMUTE_LOGIC_VERSION,
-    CRIME_CSV,
+    CRIME_RECENT_CSV,
     CTA_TRAIN_LINES,
     DEFAULT_CACHE_TTL_DAYS,
     DEFAULT_SCORE_WEIGHTS,
@@ -42,6 +42,7 @@ from housing.config import (
     REDFIN_COLUMNS,
     REDFIN_RAW_CSV,
     SOCIOECONOMIC_CSV,
+    crime_csv_path,
     load_google_api_key,
 )
 from housing.crime import CRIME_SCORE_COLUMNS
@@ -65,6 +66,9 @@ def parse_args(argv=None) -> argparse.Namespace:
                         help="Skip crime score calculations.")
     parser.add_argument("--skip-affordable", action="store_true",
                         help="Skip affordable housing proximity calculations.")
+    parser.add_argument("--force-crime", action="store_true",
+                        help="Recompute crime scores even if already present "
+                             "(use after running update_crime_data.py).")
     parser.add_argument("--ttl-days", type=int, default=DEFAULT_CACHE_TTL_DAYS,
                         help="TTL for cache entries in days.")
     parser.add_argument("--w-commute", type=float,
@@ -141,9 +145,18 @@ def load_property_data() -> pd.DataFrame:
 
 
 def load_crime_data() -> pd.DataFrame:
-    crime_df = pd.read_csv(CRIME_CSV)
+    path = crime_csv_path()
+    crime_df = pd.read_csv(path)
     crime_df.dropna(inplace=True)
-    return crime_df.reset_index(drop=True)
+    crime_df = crime_df.reset_index(drop=True)
+    if path == CRIME_RECENT_CSV and "Date" in crime_df.columns:
+        print(f"Crime data: {len(crime_df):,} incidents from {path.name} "
+              f"({str(crime_df['Date'].min())[:10]} to "
+              f"{str(crime_df['Date'].max())[:10]})")
+    else:
+        print(f"Crime data: {len(crime_df):,} incidents from {path.name} "
+              f"(static extract -- run update_crime_data.py for fresh data)")
+    return crime_df
 
 
 def load_affordable_housing_data() -> pd.DataFrame:
@@ -441,7 +454,8 @@ def main(argv=None) -> None:
             prop_df.at[i, "AFFORDABLE_NUM"] = features["NUM_AFFORDABLE_HOMES"]
             prop_df.at[i, "AFFORDABLE_DESC"] = features["AFFORDABLE_DESC"]
 
-        if not args.skip_crime and pd.isnull(prop_df.at[i, "GUN_SCORE"]):
+        if not args.skip_crime and (args.force_crime
+                                    or pd.isnull(prop_df.at[i, "GUN_SCORE"])):
             features = crime_module.get_crime_features(home_lat_lon, crime_df)
             for col in CRIME_SCORE_COLUMNS:
                 prop_df.at[i, col] = features[col]
