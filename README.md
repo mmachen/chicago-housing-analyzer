@@ -7,6 +7,9 @@ open data portal, then scores every property with a weighted `OVERALL_SCORE`.
 A Flask dashboard serves the results for interactive filtering, sorting, and
 map visualization.
 
+<img width="1888" height="982" alt="image" src="https://github.com/user-attachments/assets/43c416f5-f7c6-443e-8846-a8242e4586f7" />
+
+
 ## Features
 
 - **Data aggregation** — combines listing data with commutes, amenities, crime
