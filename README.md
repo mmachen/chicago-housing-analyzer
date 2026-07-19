@@ -150,10 +150,26 @@ python fetch_listings.py           # replaces data_sets/RedFin_raw_data.csv
 python fetch_listings.py --dry-run # preview what's new without writing
 ```
 
-The pull reports which listings are new and which dropped off. Previously
-computed commute/score data is preserved by MLS ID, so only new homes cost
-Google API calls on the next build. Note: this uses Redfin's own CSV-export
-endpoint (the "Download All" link); keep it to occasional runs.
+The pull reports which listings are new and which dropped off, plus a
+status breakdown (Active / Contingent / Pre On-Market). Previously computed
+commute/score data is preserved by MLS ID, so only new homes cost Google API
+calls on the next build. Note: this uses Redfin's own CSV-export endpoint
+(the "Download All" link); keep it to occasional runs.
+
+**Important — Redfin login cookie.** Redfin only returns MLS-listed homes
+(Active/Contingent/Pending) to signed-in sessions; anonymous requests get
+only Redfin's "early access" (Pre On-Market) pool. To pull everything:
+
+1. Sign in to [redfin.com](https://www.redfin.com) in your browser.
+2. Open DevTools (F12) → **Network** tab → reload the page.
+3. Click any `redfin.com` request → **Headers** → under *Request Headers*,
+   copy the entire value of the `cookie:` line.
+4. Paste it as one line into `delete/redfin_cookie.txt` (the `delete/`
+   folder is gitignored, like your API key).
+
+The cookie expires after a while — if a pull comes back all
+"Pre On-Market" again, repeat these steps. Searches with more than 350
+results are automatically split into price bands and merged.
 
 ### 1. Build the dataset
 

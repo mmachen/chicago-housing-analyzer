@@ -80,6 +80,14 @@ REDFIN_SEARCH_FILTERS = {
 # Property types to include: 1=house, 2=condo, 3=townhouse, 4=multi-family.
 REDFIN_PROPERTY_TYPES = "1,2,3,4"
 
+# Redfin only returns MLS-listed (Active/Contingent/Pending) homes to
+# signed-in sessions; anonymous requests get only Redfin's own
+# "early access" (Pre On-Market) pool. Paste your browser's redfin.com
+# cookie into this file (or the REDFIN_COOKIE env var) to get everything --
+# see the README for how to copy it.
+REDFIN_COOKIE_ENV_VAR = "REDFIN_COOKIE"
+REDFIN_COOKIE_FILE = PROJECT_ROOT / "delete" / "redfin_cookie.txt"
+
 # --- Google Maps API -------------------------------------------------------
 
 API_KEY_ENV_VAR = "GOOGLE_MAPS_API_KEY"

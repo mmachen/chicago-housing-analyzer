@@ -154,6 +154,7 @@
                             <h2 id="address" class="text-xl lg:text-2xl font-bold text-slate-900 leading-tight"></h2>
                             <p id="location" class="text-sm lg:text-base text-slate-500"></p>
                             <p id="price" class="text-2xl lg:text-3xl font-bold text-indigo-600 mt-2"></p>
+                            <p id="listing-meta" class="text-sm text-slate-500 mt-1"></p>
                             <p id="price-drop" class="text-sm font-semibold text-green-700 mt-1 hidden"></p>
                             <p id="open-house" class="text-sm font-medium text-indigo-700 mt-1 hidden"></p>
                         </div>
@@ -319,6 +320,14 @@
                 const card = document.createElement('div');
                 card.className = 'property-card cursor-pointer p-4 border-b border-l-4 border-transparent hover:bg-slate-50 transition-all duration-200';
                 card.dataset.mls = prop.MLS;
+                const statusChip = (prop.STATUS && prop.STATUS !== 'Active')
+                    ? `<span class="text-xs font-medium px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">${prop.STATUS}</span>` : '';
+                const domText = prop.DAY_ON_MARKET != null
+                    ? `<span>${Math.round(prop.DAY_ON_MARKET)} day${Math.round(prop.DAY_ON_MARKET) === 1 ? '' : 's'} on market</span>` : '';
+                const dropText = (prop.PRICE_DROP != null && prop.PRICE_DROP > 0)
+                    ? `<span class="font-semibold text-green-700">&darr; ${formatCurrency(prop.PRICE_DROP)}</span>` : '';
+                const metaRow = (statusChip || domText || dropText)
+                    ? `<div class="flex items-center gap-2 text-xs text-slate-500 mt-2">${statusChip}${domText}${dropText}</div>` : '';
                 card.innerHTML = `
                     <div class="flex justify-between items-start">
                         <p class="font-bold text-xl text-slate-800">${formatCurrency(prop.PRICE)}</p>
@@ -332,6 +341,7 @@
                         <span>&middot;</span>
                         <span><strong class="text-slate-700">${formatNumber(prop.SQFT) || 'N/A'}</strong> sqft</span>
                     </div>
+                    ${metaRow}
                 `;
                 card.addEventListener('click', () => handlePropertySelect(prop.MLS));
                 list.appendChild(card);
@@ -350,6 +360,11 @@
             document.getElementById('price-per-sqft').textContent = formatCurrency(prop.PRICE_PER_SQFT) || 'N/A';
             document.getElementById('hoa').textContent = (prop.HOA != null && prop.HOA > 0) ? formatCurrency(prop.HOA) : 'None';
             document.getElementById('est-tax').textContent = prop.EST_TAX_ANNUAL != null ? formatCurrency(prop.EST_TAX_ANNUAL) : 'N/A';
+
+            const metaParts = [];
+            if (prop.STATUS) metaParts.push(prop.STATUS);
+            if (prop.DAY_ON_MARKET != null) metaParts.push(`${Math.round(prop.DAY_ON_MARKET)} days on market`);
+            document.getElementById('listing-meta').textContent = metaParts.join(' · ');
 
             const priceDropEl = document.getElementById('price-drop');
             if (prop.PRICE_DROP != null && prop.PRICE_DROP > 0) {
